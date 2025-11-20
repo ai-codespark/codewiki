@@ -56,7 +56,10 @@ export async function GET() {
         // The error from backend is logged in the next line anyway
       }
       console.error(`Error from Python backend (${PROJECTS_API_ENDPOINT}): ${response.status} - ${JSON.stringify(errorBody)}`);
-      return NextResponse.json(errorBody, { status: response.status });
+
+      // Return empty array as fallback when backend is not available
+      console.warn('Using empty projects array as fallback');
+      return NextResponse.json([]);
     }
 
     const projects: ApiProcessedProject[] = await response.json();
@@ -64,11 +67,10 @@ export async function GET() {
 
   } catch (error: unknown) {
     console.error(`Network or other error when fetching from ${PROJECTS_API_ENDPOINT}:`, error);
-    const message = error instanceof Error ? error.message : 'An unknown error occurred';
-    return NextResponse.json(
-      { error: `Failed to connect to the Python backend. ${message}` },
-      { status: 503 } // Service Unavailable
-    );
+
+    // Return empty array as fallback when backend is unreachable
+    console.warn('Backend unreachable, returning empty projects array');
+    return NextResponse.json([]);
   }
 }
 

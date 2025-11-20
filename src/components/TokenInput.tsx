@@ -4,13 +4,15 @@ import React from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface TokenInputProps {
-  selectedPlatform: 'github' | 'gitlab' | 'bitbucket';
-  setSelectedPlatform: (value: 'github' | 'gitlab' | 'bitbucket') => void;
+  selectedPlatform: 'github' | 'gitlab' | 'bitbucket' | 'gerrit';
+  setSelectedPlatform: (value: 'github' | 'gitlab' | 'bitbucket' | 'gerrit') => void;
   accessToken: string;
   setAccessToken: (value: string) => void;
   showTokenSection?: boolean;
   onToggleTokenSection?: () => void;
   allowPlatformChange?: boolean;
+  gerritUsername?: string;
+  setGerritUsername?: (value: string) => void;
 }
 
 export default function TokenInput({
@@ -20,7 +22,9 @@ export default function TokenInput({
   setAccessToken,
   showTokenSection = true,
   onToggleTokenSection,
-  allowPlatformChange = true
+  allowPlatformChange = true,
+  gerritUsername,
+  setGerritUsername
 }: TokenInputProps) {
   const { messages: t } = useLanguage();
 
@@ -76,20 +80,50 @@ export default function TokenInput({
                 >
                   <span className="text-sm">Bitbucket</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPlatform('gerrit')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border transition-all ${selectedPlatform === 'gerrit'
+                    ? 'bg-[var(--accent-primary)]/10 border-[var(--accent-primary)] text-[var(--accent-primary)] shadow-sm'
+                    : 'border-[var(--border-color)] text-[var(--foreground)] hover:bg-[var(--background)]'
+                    }`}
+                >
+                  <span className="text-sm">Gerrit</span>
+                </button>
               </div>
             </div>
           )}
 
           <div>
+            {selectedPlatform === 'gerrit' && (
+              <div className="mb-3">
+                <label htmlFor="gerrit-username" className="block text-xs font-medium text-[var(--foreground)] mb-2">
+                  Gerrit Username
+                </label>
+                <input
+                  id="gerrit-username"
+                  type="text"
+                  value={gerritUsername || ''}
+                  onChange={(e) => setGerritUsername?.(e.target.value)}
+                  placeholder="Enter your Gerrit username"
+                  className="input-japanese block w-full px-3 py-2 rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)] text-sm"
+                />
+              </div>
+            )}
+
             <label htmlFor="access-token" className="block text-xs font-medium text-[var(--foreground)] mb-2">
-              {(t.form?.personalAccessToken || 'Personal Access Token').replace('{platform}', platformName)}
+              {selectedPlatform === 'gerrit'
+                ? 'Gerrit HTTP Password / Access Token'
+                : (t.form?.personalAccessToken || 'Personal Access Token').replace('{platform}', platformName)}
             </label>
             <input
               id="access-token"
               type="password"
               value={accessToken}
               onChange={(e) => setAccessToken(e.target.value)}
-              placeholder={(t.form?.tokenPlaceholder || 'Enter your access token').replace('{platform}', platformName)}
+              placeholder={selectedPlatform === 'gerrit'
+                ? 'Enter your Gerrit HTTP password or access token'
+                : (t.form?.tokenPlaceholder || 'Enter your access token').replace('{platform}', platformName)}
               className="input-japanese block w-full px-3 py-2 rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)] text-sm"
             />
             <div className="flex items-center mt-2 text-xs text-[var(--muted)]">
@@ -105,4 +139,4 @@ export default function TokenInput({
       )}
     </div>
   );
-} 
+}

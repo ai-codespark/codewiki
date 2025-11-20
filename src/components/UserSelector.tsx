@@ -112,7 +112,9 @@ export default function UserSelector({
         }
       } catch (err) {
         console.error('Failed to fetch model configurations:', err);
-        setError('Failed to load model configurations. Using default options.');
+        // Don't set error here since the API route provides fallback configuration
+        // The error will be handled by the API route which returns default config
+        setError(null);
       } finally {
         setIsLoading(false);
       }

@@ -28,19 +28,81 @@ export async function GET() {
 
       return NextResponse.json(modelConfig);
     } catch {
-      // If response is not valid JSON, return error
-      console.error('Backend response is not valid JSON:', responseText);
-      return NextResponse.json(
-        { error: `Invalid response from backend service: ${responseText}` },
-        { status: 500 }
-      );
+      // If response is not valid JSON, provide default configuration
+      console.error('Backend response is not valid JSON, using default configuration:', responseText);
+
+      // Default model configuration
+      const defaultConfig = {
+        "providers": [
+          {
+            "id": "openai",
+            "name": "OpenAI",
+            "models": [
+              {"id": "gpt-4o", "name": "GPT-4o"},
+              {"id": "gpt-4o-mini", "name": "GPT-4o Mini"}
+            ],
+            "supportsCustomModel": true
+          },
+          {
+            "id": "google",
+            "name": "Google",
+            "models": [
+              {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro"},
+              {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash"}
+            ],
+            "supportsCustomModel": true
+          },
+          {
+            "id": "litellm",
+            "name": "LiteLLM",
+            "models": [
+              {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo"}
+            ],
+            "supportsCustomModel": true
+          }
+        ],
+        "defaultProvider": "openai"
+      };
+
+      return NextResponse.json(defaultConfig);
     }
   } catch (error) {
-    console.error('Error fetching model configurations:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch model configurations from backend' },
-      { status: 500 }
-    );
+    console.error('Error fetching model configurations, using default:', error);
+
+    // Default model configuration when backend is unreachable
+    const defaultConfig = {
+      "providers": [
+        {
+          "id": "openai",
+          "name": "OpenAI",
+          "models": [
+            {"id": "gpt-4o", "name": "GPT-4o"},
+            {"id": "gpt-4o-mini", "name": "GPT-4o Mini"}
+          ],
+          "supportsCustomModel": true
+        },
+        {
+          "id": "google",
+          "name": "Google",
+          "models": [
+            {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro"},
+            {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash"}
+          ],
+          "supportsCustomModel": true
+        },
+        {
+          "id": "litellm",
+          "name": "LiteLLM",
+          "models": [
+            {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo"}
+          ],
+          "supportsCustomModel": true
+        }
+      ],
+      "defaultProvider": "openai"
+    };
+
+    return NextResponse.json(defaultConfig);
   }
 }
 

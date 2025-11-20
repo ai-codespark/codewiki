@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { FaWikipediaW, FaGithub, FaCoffee, FaTwitter } from 'react-icons/fa';
+import { FaWikipediaW, FaGithub, FaCoffee, FaTwitter, FaCodeBranch } from 'react-icons/fa';
 import ThemeToggle from '@/components/theme-toggle';
 import Mermaid from '../components/Mermaid';
 import ConfigurationModal from '@/components/ConfigurationModal';
@@ -41,6 +41,24 @@ const DEMO_SEQUENCE_CHART = `sequenceDiagram
 
   %% Add a note to make text more visible
   Note over User,GitHub: DeepWiki supports sequence diagrams for visualizing interactions`;
+
+  const DEMO_GERRIT_CHART = `graph TD
+    A[Gerrit Code Review] --> B[配置连接]
+    B --> C[选择项目]
+    C --> D[获取变更数据]
+    D --> E[生成Wiki文档]
+    E --> F[包含统计信息]
+    E --> G[包含流程图]
+    E --> H[包含变更历史]
+
+    style A fill:#f9d3a9,stroke:#d86c1f
+    style B fill:#d4a9f9,stroke:#6c1fd8
+    style C fill:#a9f9d3,stroke:#1fd86c
+    style D fill:#a9d3f9,stroke:#1f6cd8
+    style E fill:#f9a9d3,stroke:#d81f6c
+    style F fill:#d3f9a9,stroke:#6cd81f
+    style G fill:#f9d3a9,stroke:#d86c1f
+    style H fill:#d4a9f9,stroke:#6c1fd8`;
 
 export default function Home() {
   const router = useRouter();
@@ -98,6 +116,8 @@ export default function Home() {
           setExcludedFiles(config.excludedFiles || '');
           setIncludedDirs(config.includedDirs || '');
           setIncludedFiles(config.includedFiles || '');
+          setAccessToken(config.accessToken || '');
+          setGerritUsername(config.gerritUsername || '');
         }
       }
     } catch (error) {
@@ -137,8 +157,9 @@ export default function Home() {
   const [excludedFiles, setExcludedFiles] = useState('');
   const [includedDirs, setIncludedDirs] = useState('');
   const [includedFiles, setIncludedFiles] = useState('');
-  const [selectedPlatform, setSelectedPlatform] = useState<'github' | 'gitlab' | 'bitbucket'>('github');
+  const [selectedPlatform, setSelectedPlatform] = useState<'github' | 'gitlab' | 'bitbucket' | 'gerrit'>('github');
   const [accessToken, setAccessToken] = useState('');
+  const [gerritUsername, setGerritUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<string>(language);
@@ -325,6 +346,8 @@ export default function Home() {
           excludedFiles,
           includedDirs,
           includedFiles,
+          accessToken,
+          gerritUsername,
         };
         existingConfigs[currentRepoUrl] = configToSave;
         localStorage.setItem(REPO_CONFIG_CACHE_KEY, JSON.stringify(existingConfigs));
@@ -412,6 +435,12 @@ export default function Home() {
                     {t('nav.wikiProjects')}
                   </Link>
                 </div>
+                <div className="hidden md:inline-block">
+                  <Link href="/wiki/gerrit"
+                    className="text-xs font-medium text-[var(--accent-primary)] hover:text-[var(--highlight)] hover:underline whitespace-nowrap">
+                    Gerrit Wiki
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
@@ -462,25 +491,27 @@ export default function Home() {
             customModel={customModel}
             setCustomModel={setCustomModel}
             selectedPlatform={selectedPlatform}
-            setSelectedPlatform={setSelectedPlatform}
-            accessToken={accessToken}
-            setAccessToken={setAccessToken}
-            excludedDirs={excludedDirs}
-            setExcludedDirs={setExcludedDirs}
-            excludedFiles={excludedFiles}
-            setExcludedFiles={setExcludedFiles}
-            includedDirs={includedDirs}
-            setIncludedDirs={setIncludedDirs}
-            includedFiles={includedFiles}
-            setIncludedFiles={setIncludedFiles}
-            onSubmit={handleGenerateWiki}
-            isSubmitting={isSubmitting}
-            authRequired={authRequired}
-            authCode={authCode}
-            setAuthCode={setAuthCode}
-            isAuthLoading={isAuthLoading}
-            modelConfig={modelConfig}
-            setModelConfig={setModelConfig}
+          setSelectedPlatform={setSelectedPlatform}
+          accessToken={accessToken}
+          setAccessToken={setAccessToken}
+          gerritUsername={gerritUsername}
+          setGerritUsername={setGerritUsername}
+          excludedDirs={excludedDirs}
+          setExcludedDirs={setExcludedDirs}
+          excludedFiles={excludedFiles}
+          setExcludedFiles={setExcludedFiles}
+          includedDirs={includedDirs}
+          setIncludedDirs={setIncludedDirs}
+          includedFiles={includedFiles}
+          setIncludedFiles={setIncludedFiles}
+          onSubmit={handleGenerateWiki}
+          isSubmitting={isSubmitting}
+          authRequired={authRequired}
+          authCode={authCode}
+          setAuthCode={setAuthCode}
+          isAuthLoading={isAuthLoading}
+          modelConfig={modelConfig}
+          setModelConfig={setModelConfig}
           />
 
         </div>
@@ -593,6 +624,23 @@ export default function Home() {
               <div className="bg-[var(--card-bg)] p-4 rounded-lg border border-[var(--border-color)] shadow-custom">
                 <h4 className="text-sm font-medium text-[var(--foreground)] mb-3 font-serif">{t('home.sequenceDiagram')}</h4>
                 <Mermaid chart={DEMO_SEQUENCE_CHART} />
+              </div>
+
+              <div className="bg-[var(--card-bg)] p-4 rounded-lg border border-[var(--border-color)] shadow-custom">
+                <div className="flex items-center mb-3">
+                  <FaCodeBranch className="text-[var(--accent-primary)] mr-2" />
+                  <h4 className="text-sm font-medium text-[var(--foreground)] font-serif">Gerrit Code Review</h4>
+                </div>
+                <Mermaid chart={DEMO_GERRIT_CHART} />
+                <div className="mt-3 text-center">
+                  <Link
+                    href="/wiki/gerrit"
+                    className="inline-flex items-center px-4 py-2 bg-[var(--accent-primary)] hover:bg-[var(--highlight)] text-white text-sm font-medium rounded-md transition-colors"
+                  >
+                    <FaCodeBranch className="mr-2" />
+                    生成 Gerrit Wiki
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
