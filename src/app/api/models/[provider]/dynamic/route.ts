@@ -1,51 +1,80 @@
 import { NextResponse } from 'next/server';
 
-// The target backend server base URL, derived from environment variable or defaulted.
-const TARGET_SERVER_BASE_URL = process.env.SERVER_BASE_URL || 'http://127.0.0.1:8001';
+export async function GET(
+  _request: Request,
+  context: { params: { provider: string } }
+) {
+  const { provider } = context.params || { provider: '' };
 
-export async function GET(request: Request, { params }: { params: Promise<{ provider: string }> }) {
+  if (provider !== 'litellm') {
+    return NextResponse.json({ error: 'Unsupported provider' }, { status: 400 });
+  }
+
+  const baseUrl = process.env.LITELLM_BASE_URL || '';
+  const apiKey = process.env.LITELLM_API_KEY || '';
+
+  if (!baseUrl) {
+    return NextResponse.json({ error: 'Missing LITELLM_BASE_URL' }, { status: 400 });
+  }
+  if (!apiKey) {
+    return NextResponse.json({ error: 'Missing LITELLM_API_KEY' }, { status: 400 });
+  }
+
+  const url = `${baseUrl.replace(/\/$/, '')}/models`;
+
   try {
-    const { provider } = await params;
-    const targetUrl = `${TARGET_SERVER_BASE_URL}/models/${provider}/dynamic`;
-
-    // Make the actual request to the backend service
-    const backendResponse = await fetch(targetUrl, {
+    const res = await fetch(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
-      }
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      cache: 'no-store',
     });
 
-    // Always try to parse the response as JSON, regardless of status code
-    const responseText = await backendResponse.text();
+    const text = await res.text();
 
+    let json: unknown;
     try {
-      const models = JSON.parse(responseText);
-
-      // If the backend service responds with an error status but valid JSON
-      if (!backendResponse.ok) {
-        console.warn(`Backend service responded with status: ${backendResponse.status}, but returning data anyway`);
-      }
-
-      return NextResponse.json(models);
+      json = JSON.parse(text);
     } catch {
-      // If response is not valid JSON, return error
-      console.error('Backend response is not valid JSON:', responseText);
-      return NextResponse.json(
-        { error: `Invalid response from backend service: ${responseText}` },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Invalid JSON from LiteLLM /models' }, { status: 502 });
     }
+
+    type LiteLLMModel = { id?: string; model?: string };
+
+    let data: LiteLLMModel[] = [];
+    if (Array.isArray(json)) {
+      data = json as LiteLLMModel[];
+    } else if (json && typeof json === 'object') {
+      const j = json as { data?: unknown };
+      if (Array.isArray(j.data)) {
+        data = j.data as LiteLLMModel[];
+      }
+    }
+
+    if (!Array.isArray(data)) {
+      return NextResponse.json({ error: 'Unexpected response shape from LiteLLM /models' }, { status: 502 });
+    }
+
+    const models = data
+      .map((m) => {
+        const id = typeof m.id === 'string' ? m.id : typeof m.model === 'string' ? m.model : '';
+        if (!id) return null;
+        return { id, name: id };
+      })
+      .filter((m): m is { id: string; name: string } => !!m);
+
+    if (!res.ok && models.length === 0) {
+      return NextResponse.json({ error: `LiteLLM /models error: ${res.status}` }, { status: res.status || 502 });
+    }
+
+    return NextResponse.json(models);
   } catch (error) {
-    console.error('Error fetching dynamic models:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch dynamic models from backend' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: (error as Error)?.message || 'Failed to fetch models from LiteLLM' }, { status: 500 });
   }
 }
 
-// Handle OPTIONS requests for CORS if needed
 export function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
