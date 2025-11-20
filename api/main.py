@@ -33,11 +33,11 @@ if is_development:
         api_subdirs = []
         for item in os.listdir(current_dir):
             item_path = os.path.join(current_dir, item)
-            if os.path.isdir(item_path) and item != "logs":
+            if os.path.isdir(item_path) and item != "logs" and item != "__pycache__":
                 api_subdirs.append(item_path)
         
-        # Also add Python files in the api root directory
-        api_subdirs.append(current_dir + "/*.py")
+        # Add the api root directory itself (not a glob pattern)
+        api_subdirs.append(current_dir)
         
         return original_watch(*api_subdirs, **kwargs)
     watchfiles.watch = patched_watch

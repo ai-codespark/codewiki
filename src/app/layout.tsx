@@ -10,6 +10,8 @@ const notoSansJP = Noto_Sans_JP({
   subsets: ["latin"],
   weight: ["400", "500", "700"],
   display: "swap",
+  fallback: ["system-ui", "sans-serif"],
+  preload: true,
 });
 
 const notoSerifJP = Noto_Serif_JP({
@@ -17,11 +19,15 @@ const notoSerifJP = Noto_Serif_JP({
   subsets: ["latin"],
   weight: ["400", "500", "700"],
   display: "swap",
+  fallback: ["serif"],
+  preload: true,
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  fallback: ["monospace"],
+  preload: true,
 });
 
 export const metadata: Metadata = {
