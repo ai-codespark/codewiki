@@ -62,9 +62,14 @@ export default function GerritWikiGeneratorIntegrated({
     try {
       // 创建Gerrit客户端
       const client = createGerritClient({
+        id: `gerrit-${Date.now()}`,
+        name: gerritBaseUrl,
         baseUrl: gerritBaseUrl,
         username: gerritUsername,
-        password: gerritToken
+        password: gerritToken,
+        isActive: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
       });
 
       const data = await client.getWikiData(project.name);
@@ -107,9 +112,14 @@ export default function GerritWikiGeneratorIntegrated({
 
     try {
       const client = createGerritClient({
+        id: `gerrit-${Date.now()}`,
+        name: gerritBaseUrl,
         baseUrl: gerritBaseUrl,
         username: gerritUsername,
-        password: gerritToken
+        password: gerritToken,
+        isActive: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
       });
 
       const data = await client.getWikiData(selectedProject.name);
@@ -329,14 +339,18 @@ export default function GerritWikiGeneratorIntegrated({
         </div>
       </div>
 
-      {isConfigured && gerritBaseUrl && gerritUsername && gerritToken && (
+      {isConfigured && gerritBaseUrl && gerritUsername && gerritToken && showProjectSelector && (
         <GerritProjectSelector
           config={{
+            id: `gerrit-${Date.now()}`,
+            name: gerritBaseUrl,
             baseUrl: gerritBaseUrl,
             username: gerritUsername,
-            password: gerritToken
+            password: gerritToken,
+            isActive: true,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
           }}
-          isOpen={showProjectSelector}
           onClose={() => setShowProjectSelector(false)}
           onProjectSelect={handleProjectSelect}
         />

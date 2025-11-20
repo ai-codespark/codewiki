@@ -13,6 +13,17 @@ import { useProcessedProjects } from '@/hooks/useProcessedProjects';
 
 import { useLanguage } from '@/contexts/LanguageContext';
 
+// Define ModelConfig type
+interface ModelConfig {
+  providers: Array<{
+    id: string;
+    name: string;
+    models: Array<{ id: string; name: string }>;
+    supportsCustomModel?: boolean;
+  }>;
+  defaultProvider: string;
+}
+
 // Define the demo mermaid charts outside the component
 const DEMO_FLOW_CHART = `graph TD
   A[Code Repository] --> B[DeepWiki]
@@ -148,7 +159,7 @@ export default function Home() {
   const [customModel, setCustomModel] = useState<string>('');
 
   // Model configuration state for dynamic model loading
-  const [modelConfig, setModelConfig] = useState<any>(null);
+  const [modelConfig, setModelConfig] = useState<ModelConfig | undefined>(undefined);
 
   // Wiki type state - default to comprehensive view
   const [isComprehensiveView, setIsComprehensiveView] = useState<boolean>(true);

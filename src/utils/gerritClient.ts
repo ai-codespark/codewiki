@@ -50,9 +50,9 @@ export class GerritClient {
   }
 
   // 获取项目的分支
-  async getProjectBranches(projectName: string): Promise<Record<string, any>> {
+  async getProjectBranches(projectName: string): Promise<Record<string, unknown>> {
     const encodedProjectName = encodeURIComponent(projectName);
-    return this.makeRequest<Record<string, any>>(`/projects/${encodedProjectName}/branches`);
+    return this.makeRequest<Record<string, unknown>>(`/projects/${encodedProjectName}/branches`);
   }
 
   // 获取变更列表
@@ -94,13 +94,13 @@ export class GerritClient {
         abandonedChanges: 0, // 可以添加获取已放弃变更的逻辑
         lastActivity: allChanges.length > 0
           ? allChanges[0].updated
-          : project.created || new Date().toISOString(),
+          : new Date().toISOString(),
       };
 
       // 格式化分支数据
-      const formattedBranches = Object.entries(branches).map(([ref, branchData]: [string, any]) => ({
+      const formattedBranches = Object.entries(branches).map(([ref, branchData]) => ({
         ref,
-        revision: branchData.revision || '',
+        revision: (branchData as { revision?: string }).revision || '',
       }));
 
       return {

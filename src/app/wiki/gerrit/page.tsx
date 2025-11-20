@@ -5,6 +5,17 @@ import GerritWikiGeneratorIntegrated from '@/components/GerritWikiGeneratorInteg
 import ConfigurationModal from '@/components/ConfigurationModal';
 import { useNotification } from '@/components/Notification';
 
+// Define ModelConfig type
+interface ModelConfig {
+  providers: Array<{
+    id: string;
+    name: string;
+    models: Array<{ id: string; name: string }>;
+    supportsCustomModel?: boolean;
+  }>;
+  defaultProvider: string;
+}
+
 export default function GerritWikiPage() {
   const { showNotification, NotificationComponent } = useNotification();
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
@@ -29,7 +40,7 @@ export default function GerritWikiPage() {
   const [excludedFiles, setExcludedFiles] = useState('');
   const [includedDirs, setIncludedDirs] = useState('');
   const [includedFiles, setIncludedFiles] = useState('');
-  const [modelConfig, setModelConfig] = useState<any>(null);
+  const [modelConfig, setModelConfig] = useState<ModelConfig | undefined>(undefined);
 
   // 处理配置保存
   const handleConfigSave = () => {

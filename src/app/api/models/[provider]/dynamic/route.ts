@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 
 export async function GET(
   _request: Request,
-  context: { params: { provider: string } }
+  context: { params: Promise<{ provider: string }> }
 ) {
-  const { provider } = context.params || { provider: '' };
+  const { provider } = await context.params || { provider: '' };
 
   if (provider !== 'litellm') {
     return NextResponse.json({ error: 'Unsupported provider' }, { status: 400 });

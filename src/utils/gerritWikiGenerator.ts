@@ -9,8 +9,6 @@ export class GerritWikiGenerator {
 
   // 生成主wiki文档
   generateWikiDocument(): string {
-    const { project, branches, statistics } = this.data;
-
     const sections = [
       this.generateHeader(),
       this.generateProjectOverview(),
@@ -134,15 +132,19 @@ export class GerritWikiGenerator {
   }
 
   // 格式化标签
-  private formatLabels(labels?: Record<string, any>): string {
+  private formatLabels(labels?: Record<string, unknown>): string {
     if (!labels) return '-';
 
     const formattedLabels = Object.entries(labels)
-      .filter(([key, value]) => key !== 'Code-Review' || value?.approved?._account_id)
+      .filter(([key, value]) => {
+        const val = value as { approved?: { _account_id?: number } };
+        return key !== 'Code-Review' || val?.approved?._account_id;
+      })
       .map(([key, value]) => {
-        if (value?.approved) {
+        const val = value as { approved?: unknown; rejected?: unknown };
+        if (val?.approved) {
           return `✅ ${key}`;
-        } else if (value?.rejected) {
+        } else if (val?.rejected) {
           return `❌ ${key}`;
         } else {
           return `⏳ ${key}`;
@@ -154,7 +156,7 @@ export class GerritWikiGenerator {
 
   // 生成Mermaid流程图
   generateMermaidDiagram(): string {
-    const { changes, statistics } = this.data;
+    const { statistics } = this.data;
 
     return `\n## 开发流程图\n\n\`\`\`mermaid
 graph TD

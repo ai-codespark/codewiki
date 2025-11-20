@@ -37,9 +37,9 @@ export interface GerritChange {
     name: string;
     email: string;
   };
-  labels?: Record<string, any>;
+  labels?: Record<string, unknown>;
   current_revision?: string;
-  revisions?: Record<string, any>;
+  revisions?: Record<string, unknown>;
 }
 
 export interface GerritWikiData {
