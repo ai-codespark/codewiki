@@ -13,12 +13,15 @@ from api.bedrock_client import BedrockClient
 from api.google_embedder_client import GoogleEmbedderClient
 from api.azureai_client import AzureAIClient
 from api.dashscope_client import DashscopeClient
+from api.litellm_client import LiteLLMClient
 from adalflow import GoogleGenAIClient, OllamaClient
 
 # Get API keys from environment variables
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
 OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
+LITELLM_API_KEY = os.environ.get('LITELLM_API_KEY')
+LITELLM_BASE_URL = os.environ.get('LITELLM_BASE_URL')
 AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
 AWS_REGION = os.environ.get('AWS_REGION')
@@ -31,6 +34,10 @@ if GOOGLE_API_KEY:
     os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
 if OPENROUTER_API_KEY:
     os.environ["OPENROUTER_API_KEY"] = OPENROUTER_API_KEY
+if LITELLM_API_KEY:
+    os.environ["LITELLM_API_KEY"] = LITELLM_API_KEY
+if LITELLM_BASE_URL:
+    os.environ["LITELLM_BASE_URL"] = LITELLM_BASE_URL
 if AWS_ACCESS_KEY_ID:
     os.environ["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
 if AWS_SECRET_ACCESS_KEY:
@@ -60,7 +67,8 @@ CLIENT_CLASSES = {
     "OllamaClient": OllamaClient,
     "BedrockClient": BedrockClient,
     "AzureAIClient": AzureAIClient,
-    "DashscopeClient": DashscopeClient
+    "DashscopeClient": DashscopeClient,
+    "LiteLLMClient": LiteLLMClient
 }
 
 def replace_env_placeholders(config: Union[Dict[str, Any], List[Any], str, Any]) -> Union[Dict[str, Any], List[Any], str, Any]:
@@ -128,7 +136,7 @@ def load_generator_config():
             if provider_config.get("client_class") in CLIENT_CLASSES:
                 provider_config["model_client"] = CLIENT_CLASSES[provider_config["client_class"]]
             # Fall back to default mapping based on provider_id
-            elif provider_id in ["google", "openai", "openrouter", "ollama", "bedrock", "azure", "dashscope"]:
+            elif provider_id in ["google", "openai", "openrouter", "ollama", "bedrock", "azure", "dashscope", "litellm"]:
                 default_map = {
                     "google": GoogleGenAIClient,
                     "openai": OpenAIClient,
@@ -136,7 +144,8 @@ def load_generator_config():
                     "ollama": OllamaClient,
                     "bedrock": BedrockClient,
                     "azure": AzureAIClient,
-                    "dashscope": DashscopeClient
+                    "dashscope": DashscopeClient,
+                    "litellm": LiteLLMClient
                 }
                 provider_config["model_client"] = default_map[provider_id]
             else:
@@ -169,6 +178,8 @@ def get_embedder_config():
         return configs.get("embedder_google", {})
     elif embedder_type == 'ollama' and 'embedder_ollama' in configs:
         return configs.get("embedder_ollama", {})
+    elif embedder_type == 'litellm' and 'embedder_litellm' in configs:
+        return configs.get("embedder_litellm", {})
     else:
         return configs.get("embedder", {})
 
@@ -212,17 +223,40 @@ def is_google_embedder():
     client_class = embedder_config.get("client_class", "")
     return client_class == "GoogleEmbedderClient"
 
+def is_litellm_embedder():
+    """
+    Check if the current embedder configuration uses OpenAIClient with LiteLLM.
+
+    Returns:
+        bool: True if using OpenAIClient with LiteLLM configuration, False otherwise
+    """
+    embedder_config = get_embedder_config()
+    if not embedder_config:
+        return False
+
+    # Check if model_client is OpenAIClient and embedder_type is litellm
+    model_client = embedder_config.get("model_client")
+    if model_client and model_client.__name__ == "OpenAIClient":
+        # Check if this is configured for LiteLLM use
+        return EMBEDDER_TYPE == 'litellm'
+
+    # Fallback: check client_class string and embedder_type
+    client_class = embedder_config.get("client_class", "")
+    return client_class == "OpenAIClient" and EMBEDDER_TYPE == 'litellm'
+
 def get_embedder_type():
     """
     Get the current embedder type based on configuration.
     
     Returns:
-        str: 'ollama', 'google', or 'openai' (default)
+        str: 'ollama', 'google', 'litellm', or 'openai' (default)
     """
     if is_ollama_embedder():
         return 'ollama'
     elif is_google_embedder():
         return 'google'
+    elif is_litellm_embedder():
+        return 'litellm'
     else:
         return 'openai'
 

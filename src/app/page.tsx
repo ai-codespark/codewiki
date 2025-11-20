@@ -127,6 +127,9 @@ export default function Home() {
   const [isCustomModel, setIsCustomModel] = useState<boolean>(false);
   const [customModel, setCustomModel] = useState<string>('');
 
+  // Model configuration state for dynamic model loading
+  const [modelConfig, setModelConfig] = useState<any>(null);
+
   // Wiki type state - default to comprehensive view
   const [isComprehensiveView, setIsComprehensiveView] = useState<boolean>(true);
 
@@ -476,6 +479,8 @@ export default function Home() {
             authCode={authCode}
             setAuthCode={setAuthCode}
             isAuthLoading={isAuthLoading}
+            modelConfig={modelConfig}
+            setModelConfig={setModelConfig}
           />
 
         </div>

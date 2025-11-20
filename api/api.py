@@ -185,7 +185,9 @@ async def get_model_config():
         # Add provider configuration based on config.py
         for provider_id, provider_config in configs["providers"].items():
             models = []
-            # Add models from config
+
+            # For litellm, we'll fetch models dynamically when provider is selected
+            # For now, use config file models as fallback
             for model_id in provider_config["models"].keys():
                 # Get a more user-friendly display name if possible
                 models.append(Model(id=model_id, name=model_id))
@@ -223,6 +225,53 @@ async def get_model_config():
             ],
             defaultProvider="google"
         )
+
+
+@app.get("/models/{provider_id}/dynamic", response_model=List[Model])
+async def get_dynamic_models(provider_id: str):
+    """
+    Get dynamic models for a specific provider.
+
+    This endpoint fetches available models dynamically from the provider's API.
+    Currently supports dynamic model fetching for 'litellm' provider.
+
+    Args:
+        provider_id: The provider ID (e.g., 'litellm')
+
+    Returns:
+        List[Model]: List of available models from the provider
+    """
+    try:
+        logger.info(f"Fetching dynamic models for provider: {provider_id}")
+
+        if provider_id == "litellm":
+            try:
+                from api.litellm_client import LiteLLMClient
+
+                # Initialize LiteLLM client with environment variables
+                litellm_client = LiteLLMClient()
+                dynamic_models = litellm_client.list_models()
+
+                # Convert to Model objects
+                models = []
+                for model_id in dynamic_models:
+                    models.append(Model(id=model_id, name=model_id))
+
+                logger.info(f"Fetched {len(models)} dynamic models for Litellm")
+                return models
+
+            except Exception as e:
+                logger.error(f"Failed to fetch dynamic models for Litellm: {e}")
+                # Return empty list if dynamic fetching fails
+                return []
+        else:
+            # For other providers, return empty list (not supported)
+            logger.warning(f"Dynamic model fetching not supported for provider: {provider_id}")
+            return []
+
+    except Exception as e:
+        logger.error(f"Error fetching dynamic models for {provider_id}: {str(e)}")
+        return []
 
 @app.post("/export/wiki")
 async def export_wiki(request: WikiExportRequest):

@@ -5,6 +5,18 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import UserSelector from './UserSelector';
 import TokenInput from './TokenInput';
 
+interface Provider {
+  id: string;
+  name: string;
+  models: Array<{ id: string; name: string }>;
+  supportsCustomModel?: boolean;
+}
+
+interface ModelConfig {
+  providers: Provider[];
+  defaultProvider: string;
+}
+
 interface ConfigurationModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -30,6 +42,8 @@ interface ConfigurationModalProps {
   setIsCustomModel: (value: boolean) => void;
   customModel: string;
   setCustomModel: (value: string) => void;
+  modelConfig?: ModelConfig;
+  setModelConfig?: (config: ModelConfig) => void;
 
   // Platform selection
   selectedPlatform: 'github' | 'gitlab' | 'bitbucket';
@@ -94,7 +108,9 @@ export default function ConfigurationModal({
   authRequired,
   authCode,
   setAuthCode,
-  isAuthLoading
+  isAuthLoading,
+  modelConfig,
+  setModelConfig
 }: ConfigurationModalProps) {
   const { messages: t } = useLanguage();
 
@@ -219,6 +235,8 @@ export default function ConfigurationModal({
                 setIsCustomModel={setIsCustomModel}
                 customModel={customModel}
                 setCustomModel={setCustomModel}
+                modelConfig={modelConfig}
+                setModelConfig={setModelConfig}
                 showFileFilters={true}
                 excludedDirs={excludedDirs}
                 setExcludedDirs={setExcludedDirs}

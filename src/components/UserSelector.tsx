@@ -30,6 +30,8 @@ interface ModelSelectorProps {
   setIsCustomModel: (value: boolean) => void;
   customModel: string;
   setCustomModel: (value: string) => void;
+  modelConfig?: ModelConfig;
+  setModelConfig?: (config: ModelConfig) => void;
 
   // File filter configuration
   showFileFilters?: boolean;
@@ -52,6 +54,8 @@ export default function UserSelector({
   setIsCustomModel,
   customModel,
   setCustomModel,
+  modelConfig,
+  setModelConfig,
 
   // File filter configuration
   showFileFilters = false,
@@ -71,7 +75,6 @@ export default function UserSelector({
   const { messages: t } = useLanguage();
 
   // State for model configurations from backend
-  const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,7 +96,9 @@ export default function UserSelector({
         }
 
         const data = await response.json();
-        setModelConfig(data);
+        if (setModelConfig) {
+          setModelConfig(data);
+        }
 
         // Initialize provider and model with defaults from API if not already set
         if (!provider && data.defaultProvider) {
@@ -117,13 +122,52 @@ export default function UserSelector({
   }, [provider, setModel, setProvider]);
 
   // Handler for changing provider
-  const handleProviderChange = (newProvider: string) => {
+  const handleProviderChange = async (newProvider: string) => {
     setProvider(newProvider);
-    setTimeout(() => {
-      // Reset custom model state when changing providers
-      setIsCustomModel(false);
 
-      // Set default model for the selected provider
+    // Reset custom model state when changing providers
+    setIsCustomModel(false);
+
+    // For litellm provider, fetch dynamic models
+    if (newProvider === 'litellm') {
+      try {
+        const response = await fetch(`/api/models/${newProvider}/dynamic`);
+        if (response.ok) {
+          const dynamicModels = await response.json();
+          if (dynamicModels && dynamicModels.length > 0) {
+            // Update the model config with dynamic models for litellm
+            if (modelConfig) {
+              const updatedProviders = modelConfig.providers.map((p: Provider) => {
+                if (p.id === 'litellm') {
+                  return {
+                    ...p,
+                    models: dynamicModels.map((model: { id: string; name: string }) => ({
+                      id: model.id,
+                      name: model.name
+                    }))
+                  };
+                }
+                return p;
+              });
+              if (setModelConfig) {
+                setModelConfig({
+                  ...modelConfig,
+                  providers: updatedProviders
+                });
+              }
+              // Set the first dynamic model as default
+              setModel(dynamicModels[0].id);
+              return;
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch dynamic models for litellm:', error);
+      }
+    }
+
+    // Fallback to config file models
+    setTimeout(() => {
       if (modelConfig) {
         const selectedProvider = modelConfig.providers.find((p: Provider) => p.id === newProvider);
         if (selectedProvider && selectedProvider.models.length > 0) {
@@ -322,11 +366,15 @@ next.config.js
               className="input-japanese block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
               disabled={!provider || isLoading || !modelConfig?.providers.find(p => p.id === provider)?.models?.length}
             >
-              {modelConfig?.providers.find((p: Provider) => p.id === provider)?.models.map((modelOption) => (
-                <option key={modelOption.id} value={modelOption.id}>
-                  {modelOption.name}
-                </option>
-              )) || <option value="">{t.form?.selectModel || 'Select Model'}</option>}
+              {(() => {
+                const providerModels = modelConfig?.providers.find((p: Provider) => p.id === provider)?.models;
+                console.log('Rendering models for provider', provider, ':', providerModels);
+                return providerModels?.map((modelOption) => (
+                  <option key={modelOption.id} value={modelOption.id}>
+                    {modelOption.name}
+                  </option>
+                )) || <option value="">{t.form?.selectModel || 'Select Model'}</option>;
+              })()}
             </select>
           )}
         </div>
@@ -341,7 +389,7 @@ next.config.js
                   const newValue = !isCustomModel;
                   setIsCustomModel(newValue);
                   if (newValue) {
-                    setCustomModel(model);
+                    setCustomModel('');
                   }
                 }}
               >
@@ -363,7 +411,7 @@ next.config.js
                   const newValue = !isCustomModel;
                   setIsCustomModel(newValue);
                   if (newValue) {
-                    setCustomModel(model);
+                    setCustomModel('');
                   }
                 }}
               >
