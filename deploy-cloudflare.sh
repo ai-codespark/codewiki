@@ -32,8 +32,16 @@ precheck() {
     node_ver=$(node -v 2>/dev/null | sed 's/^v//')
     node_major=${node_ver%%.*}
     if [[ -n "$node_major" ]] && (( node_major < 20 )); then
-      printf "%s\n" "${YELLOW}⚠️ 检测到 Node.js v${node_ver}，建议升级到 v20+（继续部署）${NC}"
+      printf "%s\n" "${RED}❌ Node.js 版本过低 (v${node_ver})，wrangler 需要 v20.0.0 或更高版本${NC}"
+      printf "%s\n" "${YELLOW}请使用以下命令升级 Node.js:${NC}"
+      printf "%s\n" "${YELLOW}  Windows: nvm install 20 && nvm use 20${NC}"
+      printf "%s\n" "${YELLOW}  macOS/Linux: nvm install 20 && nvm use 20${NC}"
+      printf "%s\n" "${YELLOW}  或使用 Node.js 安装包: https://nodejs.org/${NC}"
+      exit 1
     fi
+  else
+    printf "%s\n" "${RED}❌ 未检测到 Node.js，请先安装 Node.js v20+${NC}"
+    exit 1
   fi
 
   wrangler whoami >/dev/null 2>&1 || {
@@ -132,6 +140,27 @@ create_cloudflare_resources() {
   fi
 }
 
+deploy_pages_frontend() {
+  local output_dir=".vercel/output/static"
+  printf "%s\n" "${BLUE}🚀 部署前端 Pages: codewiki${NC}"
+
+  if [[ ! -d "$output_dir" ]]; then
+    printf "%s\n" "${RED}❌ 未找到构建输出目录: $output_dir${NC}"
+    return 1
+  fi
+
+  if ! wrangler pages project list | grep -q "codewiki"; then
+    wrangler pages project create codewiki >/dev/null 2>&1 || true
+  fi
+
+  if ! wrangler pages deploy "$output_dir" --project-name codewiki; then
+    printf "%s\n" "${RED}❌ Pages 前端部署失败${NC}"
+    return 1
+  fi
+
+  printf "%s\n" "${GREEN}✅ Pages 前端部署成功${NC}"
+}
+
 deploy_worker() {
   local worker_name="$1" env_file="$2"
   printf "%s\n" "${BLUE}🚀 部署 Worker: $worker_name${NC}"
@@ -152,8 +181,11 @@ build_frontend() {
   printf "%s\n" "${BLUE}📦 构建前端应用...${NC}"
 
   if [[ -f "package.json" ]]; then
-    if ! npm run build; then
+    # 清理旧构建缓存，确保强制更新
+    rm -rf .next .vercel
+    if ! npm run build:pages; then
       printf "%s\n" "${RED}❌ 前端构建失败${NC}"
+      printf "%s\n" "${YELLOW}请在 PowerShell 或 WSL/Linux/macOS 运行 npm run build:pages 以生成 .vercel/output/static${NC}"
       return 1
     fi
   else
@@ -178,18 +210,36 @@ main() {
     parse_env_file "$env_file"
   fi
 
+  [[ -z "${CF_PAGES:-}" ]] && export CF_PAGES=1
+  [[ -z "${NODE_ENV:-}" ]] && export NODE_ENV=production
+
+  local has_key=false
+  [[ -n "${OPENAI_API_KEY:-}" ]] && has_key=true
+  [[ -n "${GOOGLE_API_KEY:-}" ]] && has_key=true
+  [[ -n "${GEMINI_API_KEY:-}" ]] && has_key=true
+  [[ -n "${ANTHROPIC_API_KEY:-}" ]] && has_key=true
+  [[ -n "${LITELLM_API_KEY:-}" ]] && has_key=true
+  if [[ "$has_key" == false ]]; then
+    printf "%s\n" "⚠️  请在环境文件中设置至少一个模型提供商 API 密钥"
+    return 1
+  fi
+  if [[ "${OPENAI_API_KEY:-}" == "sk-your-openai-api-key-here" ]]; then
+    printf "%s\n" "⚠️  OPENAI_API_KEY 为占位符，请配置有效密钥"
+    return 1
+  fi
+
   create_cloudflare_resources
   build_frontend
 
   printf "\n"
   header
-  printf "%s\n" "${BLUE}   部署前端 Worker${NC}"
+  printf "%s\n" "${BLUE}   部署前端 Pages (codewiki)${NC}"
   header
-  deploy_worker "codewiki" "$frontend_env_file"
+  deploy_pages_frontend
 
   printf "\n"
   header
-  printf "%s\n" "${BLUE}   部署后端 API Worker${NC}"
+  printf "%s\n" "${BLUE}   部署后端 API Worker (codewiki-service)${NC}"
   header
 
   if [[ -d "api" ]]; then
@@ -259,6 +309,38 @@ done
 # 设置默认值
 [[ -z "$FRONTEND_ENV_FILE" ]] && FRONTEND_ENV_FILE="$ENV_FILE"
 [[ -z "$API_ENV_FILE" ]] && API_ENV_FILE="$ENV_FILE"
+
+# 自动选择 Cloudflare 环境文件
+if [[ ! -f "$ENV_FILE" ]]; then
+  if [[ -f ".env.cloudflare" ]]; then
+    ENV_FILE=".env.cloudflare"
+    [[ "$FRONTEND_ENV_FILE" == ".env" ]] && FRONTEND_ENV_FILE=".env.cloudflare"
+    [[ "$API_ENV_FILE" == ".env" ]] && API_ENV_FILE=".env.cloudflare"
+  else
+    cat > .env.cloudflare << 'EOF'
+NODE_ENV=production
+NEXT_TELEMETRY_DISABLED=1
+CF_PAGES=1
+DEFAULT_PROVIDER=openai
+OPENAI_API_KEY=sk-your-openai-api-key-here
+GOOGLE_API_KEY=
+GEMINI_API_KEY=
+LITELLM_BASE_URL=
+LITELLM_API_KEY=
+ANTHROPIC_API_KEY=
+SERVER_BASE_URL=
+DEEPWIKI_EMBEDDER_TYPE=google
+EOF
+    printf "%s\n" "⚠️  已生成 .env.cloudflare，请填写 API 密钥后重试"
+    exit 1
+  fi
+fi
+
+# 基础校验
+if [[ -f "$ENV_FILE" ]] && grep -q "sk-your-openai-api-key-here" "$ENV_FILE"; then
+  printf "%s\n" "⚠️  请在 $ENV_FILE 中配置有效的 OPENAI_API_KEY 或其他模型提供商密钥"
+  exit 1
+fi
 
 # 干运行模式
 if [[ "$DRY_RUN" == true ]]; then

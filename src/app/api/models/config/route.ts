@@ -3,8 +3,50 @@ import { NextResponse } from 'next/server';
 // The target backend server base URL, derived from environment variable or defaulted.
 const TARGET_SERVER_BASE_URL = process.env.SERVER_BASE_URL || 'http://localhost:8001';
 
+// Check if we're running in Cloudflare environment
+const IS_CLOUDFLARE = process.env.CF_PAGES === '1' || process.env.NODE_ENV === 'production';
+
+// Default model configuration for Cloudflare deployment
+const CLOUDFLARE_DEFAULT_CONFIG = {
+  "providers": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "models": [
+        {"id": "gpt-4o", "name": "GPT-4o"},
+        {"id": "gpt-4o-mini", "name": "GPT-4o Mini"}
+      ],
+      "supportsCustomModel": true
+    },
+    {
+      "id": "google",
+      "name": "Google",
+      "models": [
+        {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro"},
+        {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash"}
+      ],
+      "supportsCustomModel": true
+    },
+    {
+      "id": "litellm",
+      "name": "LiteLLM",
+      "models": [
+        {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo"}
+      ],
+      "supportsCustomModel": true
+    }
+  ],
+  "defaultProvider": "openai"
+};
+
 export async function GET() {
   try {
+    // For Cloudflare deployment, always return default configuration
+    if (IS_CLOUDFLARE || TARGET_SERVER_BASE_URL === 'http://localhost:8001') {
+      console.log('Cloudflare deployment detected, returning default model configuration');
+      return NextResponse.json(CLOUDFLARE_DEFAULT_CONFIG);
+    }
+
     const targetUrl = `${TARGET_SERVER_BASE_URL}/models/config`;
 
     // Make the actual request to the backend service
@@ -30,79 +72,11 @@ export async function GET() {
     } catch {
       // If response is not valid JSON, provide default configuration
       console.error('Backend response is not valid JSON, using default configuration:', responseText);
-
-      // Default model configuration
-      const defaultConfig = {
-        "providers": [
-          {
-            "id": "openai",
-            "name": "OpenAI",
-            "models": [
-              {"id": "gpt-4o", "name": "GPT-4o"},
-              {"id": "gpt-4o-mini", "name": "GPT-4o Mini"}
-            ],
-            "supportsCustomModel": true
-          },
-          {
-            "id": "google",
-            "name": "Google",
-            "models": [
-              {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro"},
-              {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash"}
-            ],
-            "supportsCustomModel": true
-          },
-          {
-            "id": "litellm",
-            "name": "LiteLLM",
-            "models": [
-              {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo"}
-            ],
-            "supportsCustomModel": true
-          }
-        ],
-        "defaultProvider": "openai"
-      };
-
-      return NextResponse.json(defaultConfig);
+      return NextResponse.json(CLOUDFLARE_DEFAULT_CONFIG);
     }
   } catch (error) {
     console.error('Error fetching model configurations, using default:', error);
-
-    // Default model configuration when backend is unreachable
-    const defaultConfig = {
-      "providers": [
-        {
-          "id": "openai",
-          "name": "OpenAI",
-          "models": [
-            {"id": "gpt-4o", "name": "GPT-4o"},
-            {"id": "gpt-4o-mini", "name": "GPT-4o Mini"}
-          ],
-          "supportsCustomModel": true
-        },
-        {
-          "id": "google",
-          "name": "Google",
-          "models": [
-            {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro"},
-            {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash"}
-          ],
-          "supportsCustomModel": true
-        },
-        {
-          "id": "litellm",
-          "name": "LiteLLM",
-          "models": [
-            {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo"}
-          ],
-          "supportsCustomModel": true
-        }
-      ],
-      "defaultProvider": "openai"
-    };
-
-    return NextResponse.json(defaultConfig);
+    return NextResponse.json(CLOUDFLARE_DEFAULT_CONFIG);
   }
 }
 

@@ -78,6 +78,46 @@ export default function UserSelector({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const DEFAULT_MODEL_CONFIG: ModelConfig = {
+    providers: [
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        models: [
+          { id: 'gpt-4o', name: 'GPT-4o' },
+          { id: 'gpt-4o-mini', name: 'GPT-4o Mini' }
+        ],
+        supportsCustomModel: true
+      },
+      {
+        id: 'google',
+        name: 'Google',
+        models: [
+          { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
+          { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' }
+        ],
+        supportsCustomModel: true
+      },
+      {
+        id: 'litellm',
+        name: 'LiteLLM',
+        models: [
+          { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' }
+        ],
+        supportsCustomModel: true
+      }
+    ],
+    defaultProvider: 'openai'
+  };
+
+  const [internalModelConfig, setInternalModelConfig] = useState<ModelConfig | undefined>(modelConfig);
+
+  useEffect(() => {
+    if (modelConfig) {
+      setInternalModelConfig(modelConfig);
+    }
+  }, [modelConfig]);
+
   // State for viewing default values
   const [showDefaultDirs, setShowDefaultDirs] = useState(false);
   const [showDefaultFiles, setShowDefaultFiles] = useState(false);
@@ -89,6 +129,7 @@ export default function UserSelector({
         setIsLoading(true);
         setError(null);
 
+        console.log('Fetching model configurations from /api/models/config');
         const response = await fetch('/api/models/config');
 
         if (!response.ok) {
@@ -96,15 +137,16 @@ export default function UserSelector({
         }
 
         const data = await response.json();
+        console.log('Received model configuration:', data);
         if (setModelConfig) {
           setModelConfig(data);
+        } else {
+          setInternalModelConfig(data);
         }
 
         // Initialize provider and model with defaults from API if not already set
         if (!provider && data.defaultProvider) {
           setProvider(data.defaultProvider);
-
-          // Find the default provider and set its default model
           const selectedProvider = data.providers.find((p: Provider) => p.id === data.defaultProvider);
           if (selectedProvider && selectedProvider.models.length > 0) {
             setModel(selectedProvider.models[0].id);
@@ -112,8 +154,19 @@ export default function UserSelector({
         }
       } catch (err) {
         console.error('Failed to fetch model configurations:', err);
-        // Don't set error here since the API route provides fallback configuration
-        // The error will be handled by the API route which returns default config
+        const fallback = DEFAULT_MODEL_CONFIG;
+        if (setModelConfig) {
+          setModelConfig(fallback);
+        } else {
+          setInternalModelConfig(fallback);
+        }
+        if (!provider && fallback.defaultProvider) {
+          setProvider(fallback.defaultProvider);
+          const selectedProvider = fallback.providers.find((p: Provider) => p.id === fallback.defaultProvider);
+          if (selectedProvider && selectedProvider.models.length > 0) {
+            setModel(selectedProvider.models[0].id);
+          }
+        }
         setError(null);
       } finally {
         setIsLoading(false);
@@ -121,7 +174,7 @@ export default function UserSelector({
     };
 
     fetchModelConfig();
-  }, [provider, setModel, setProvider]);
+  }, [provider, setModel, setProvider, setModelConfig]);
 
   // Handler for changing provider
   const handleProviderChange = async (newProvider: string) => {
@@ -315,6 +368,35 @@ next.config.js
     );
   }
 
+  // Display error state
+  if (error) {
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="text-sm text-red-500 mb-2">{error}</div>
+        <div className="text-xs text-[var(--muted)]">
+          Please ensure your Cloudflare deployment is properly configured with model provider API keys.
+        </div>
+      </div>
+    );
+  }
+
+  // Display empty state if no providers available
+  if (!modelConfig || !modelConfig.providers || modelConfig.providers.length === 0) {
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="text-sm text-red-500 mb-2">No model providers available</div>
+        <div className="text-xs text-[var(--muted)]">
+          Model providers could not be loaded. This usually happens when:
+          <ul className="list-disc ml-4 mt-1">
+            <li>Backend server is not running (in local development)</li>
+            <li>Cloudflare deployment is missing API key configuration</li>
+            <li>API route /api/models/config is not accessible</li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="space-y-4">
@@ -334,7 +416,7 @@ next.config.js
             className="input-japanese block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
           >
             <option value="" disabled>{t.form?.selectProvider || 'Select Provider'}</option>
-            {modelConfig?.providers.map((providerOption) => (
+            {(modelConfig ?? internalModelConfig)?.providers.map((providerOption) => (
               <option key={providerOption.id} value={providerOption.id}>
                 {t.form?.[`provider${providerOption.id.charAt(0).toUpperCase() + providerOption.id.slice(1)}`] || providerOption.name}
               </option>
@@ -366,10 +448,10 @@ next.config.js
               value={model}
               onChange={(e) => setModel(e.target.value)}
               className="input-japanese block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
-              disabled={!provider || isLoading || !modelConfig?.providers.find(p => p.id === provider)?.models?.length}
+              disabled={!provider || isLoading || !(modelConfig ?? internalModelConfig)?.providers.find(p => p.id === provider)?.models?.length}
             >
               {(() => {
-                const providerModels = modelConfig?.providers.find((p: Provider) => p.id === provider)?.models;
+                const providerModels = (modelConfig ?? internalModelConfig)?.providers.find((p: Provider) => p.id === provider)?.models;
                 console.log('Rendering models for provider', provider, ':', providerModels);
                 return providerModels?.map((modelOption) => (
                   <option key={modelOption.id} value={modelOption.id}>
@@ -382,7 +464,7 @@ next.config.js
         </div>
 
         {/* Custom model toggle - only when provider supports it */}
-        {modelConfig?.providers.find((p: Provider) => p.id === provider)?.supportsCustomModel && (
+        {(modelConfig ?? internalModelConfig)?.providers.find((p: Provider) => p.id === provider)?.supportsCustomModel && (
           <div className="mb-2">
             <div className="flex items-center pb-1">
               <div
