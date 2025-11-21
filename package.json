@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
+    "build:pages": "npx @cloudflare/next-on-pages",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "deploy:pages": "npm run build:pages && wrangler pages deploy .vercel/output/static --project-name=codewiki"
   },
   "dependencies": {
     "mermaid": "^11.4.1",
@@ -23,6 +25,7 @@
     "svg-pan-zoom": "^3.6.2"
   },
   "devDependencies": {
+    "@cloudflare/next-on-pages": "^1.13.16",
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

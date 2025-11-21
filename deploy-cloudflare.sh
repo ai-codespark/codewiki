@@ -193,7 +193,7 @@ main() {
   header
 
   if [[ -d "api" ]]; then
-    printf "%s\n" "${YELLOW}⚠️  暂时跳过后端部署（等待 wrangler 多 Worker 配置调整）${NC}"
+    deploy_worker "codewiki-service" "$api_env_file"
   else
     printf "%s\n" "${YELLOW}⚠️  未找到 api 目录，跳过后端部署${NC}"
   fi
