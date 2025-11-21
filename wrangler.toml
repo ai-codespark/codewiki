@@ -1,0 +1,135 @@
+# Cloudflare Workers 配置 for CodeWiki
+# 前端 Next.js 应用配置
+name = "codewiki"
+main = "src/index.ts"
+compatibility_date = "2024-11-21"
+
+# 前端构建配置
+[build]
+command = "npm run build"
+cwd = "."
+watch_dir = "src"
+
+# 基础环境变量配置
+[vars]
+NODE_ENV = "production"
+NEXT_TELEMETRY_DISABLED = "1"
+
+# 生产环境配置
+[env.production]
+name = "codewiki-prod"
+
+# 开发环境配置
+[env.development]
+name = "codewiki-dev"
+
+# 测试环境配置
+[env.staging]
+name = "codewiki-staging"
+
+# 后端 API Workers 配置
+[[workers]]
+name = "codewiki-service"
+main = "api/index.ts"
+compatibility_date = "2024-11-21"
+
+# Python Workers 支持
+[workers.build]
+command = ""
+cwd = "api"
+
+# 后端环境变量
+[workers.vars]
+PYTHON_VERSION = "3.11"
+WORKERS_RUNTIME = "javascript"
+
+# 路由配置（暂时移除，使用 workers.dev 默认域名）
+# [[routes]]
+# pattern = "api/*"
+# zone_name = "codewiki.app"
+#
+# [[routes]]
+# pattern = "static/*"
+# zone_name = "codewiki.app"
+#
+# [[routes]]
+# pattern = "*"
+# zone_name = "codewiki.app"
+
+# KV 命名空间配置（用于缓存和会话存储）
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "57e64c61e00d44818e7520532f9b72aa"
+
+# D1 数据库配置（暂时移除，等待账户启用 D1 后再恢复）
+# [[d1_databases]]
+# binding = "CODEDB"
+# database_name = "codewiki-db"
+# database_id = "your-d1-database-id"
+
+# R2 存储配置（暂时移除，等待账户启用 R2 后再恢复）
+# [[r2_buckets]]
+# binding = "FILES"
+# bucket_name = "codewiki-files"
+
+# AI 模型配置
+[ai]
+binding = "AI"
+
+# 兼容性设置
+compatibility_flags = ["nodejs_compat"]
+
+# Cloudflare Pages 构建输出目录
+pages_build_output_dir = ".vercel/output/static"
+
+# 资源限制（移除 Free 计划不支持的 CPU 限制）
+
+# 环境变量配置（通过 deploy-cloudflare.sh 脚本自动设置）
+# 这些变量将从 .env 文件中读取并自动配置到 Cloudflare Workers
+# 使用 wrangler secret put 命令设置，不会在配置文件中明文存储
+
+# 基础配置
+# SERVER_BASE_URL: 服务器基础 URL
+# NODE_ENV: 运行环境
+# DEBUG: 调试模式
+
+# AI 服务配置
+# OPENAI_API_KEY: OpenAI API 密钥
+# ANTHROPIC_API_KEY: Anthropic API 密钥
+# AZURE_OPENAI_API_KEY: Azure OpenAI API 密钥
+# AZURE_OPENAI_ENDPOINT: Azure OpenAI 端点
+# GOOGLE_API_KEY: Google API 密钥
+# GEMINI_API_KEY: Gemini API 密钥
+
+# 嵌入服务配置
+# DEEPWIKI_EMBEDDER_TYPE: 嵌入服务类型 (google, openai, litellm, ollama)
+# LITELLM_BASE_URL: LiteLLM 服务地址
+# LITELLM_API_KEY: LiteLLM API 密钥
+# OLLAMA_BASE_URL: Ollama 服务地址
+
+# AWS 配置
+# AWS_ACCESS_KEY_ID: AWS 访问密钥
+# AWS_SECRET_ACCESS_KEY: AWS 密钥
+# AWS_REGION: AWS 区域
+# AWS_BEDROCK_REGION: AWS Bedrock 区域
+
+# Azure 配置
+# AZURE_AI_SERVICES_API_KEY: Azure AI 服务密钥
+# AZURE_AI_SERVICES_ENDPOINT: Azure AI 服务端点
+
+# 应用配置
+# MAX_TOKENS: 最大令牌数
+# TEMPERATURE: AI 温度参数
+# LOG_LEVEL: 日志级别
+
+# 安全配置
+# JWT_SECRET: JWT 密钥
+# SESSION_SECRET: 会话密钥
+# CORS_ORIGIN: CORS 源设置
+
+# 第三方集成
+# GITHUB_TOKEN: GitHub 令牌
+# GITLAB_TOKEN: GitLab 令牌
+# GERRIT_URL: Gerrit 地址
+# GERRIT_USERNAME: Gerrit 用户名
+# GERRIT_PASSWORD: Gerrit 密码
