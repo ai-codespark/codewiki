@@ -24,6 +24,15 @@ RUN NODE_ENV=production npm run build
 
 FROM python:3.11-slim AS py_deps
 WORKDIR /api
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip and setuptools
+RUN python -m pip install --upgrade pip setuptools wheel --no-cache-dir
+
 COPY api/pyproject.toml .
 COPY api/poetry.lock .
 RUN python -m pip install poetry==2.0.1 --no-cache-dir && \
@@ -31,7 +40,7 @@ RUN python -m pip install poetry==2.0.1 --no-cache-dir && \
     poetry config virtualenvs.in-project true --local && \
     poetry config virtualenvs.options.always-copy --local true && \
     POETRY_MAX_WORKERS=10 poetry install --no-interaction --no-ansi --only main && \
-    poetry cache clear --all .
+    poetry cache clear pypi --all || true
 
 # Use Python 3.11 as final image
 FROM python:3.11-slim
