@@ -8,6 +8,7 @@ import tiktoken
 import logging
 import base64
 import glob
+import pickle
 from adalflow.utils import get_adalflow_default_root_path
 from adalflow.core.db import LocalDB
 from api.config import configs, DEFAULT_EXCLUDED_DIRS, DEFAULT_EXCLUDED_FILES
@@ -42,7 +43,7 @@ def count_tokens(text: str, embedder_type: str = None, is_ollama_embedder: bool 
         # Handle backward compatibility
         if embedder_type is None and is_ollama_embedder is not None:
             embedder_type = 'ollama' if is_ollama_embedder else None
-        
+
         # Determine embedder type if not specified
         if embedder_type is None:
             from api.config import get_embedder_type
@@ -147,7 +148,7 @@ def download_repo(repo_url: str, local_path: str, repo_type: str = None, access_
 # Alias for backward compatibility
 download_github_repo = download_repo
 
-def read_all_documents(path: str, embedder_type: str = None, is_ollama_embedder: bool = None, 
+def read_all_documents(path: str, embedder_type: str = None, is_ollama_embedder: bool = None,
                       excluded_dirs: List[str] = None, excluded_files: List[str] = None,
                       included_dirs: List[str] = None, included_files: List[str] = None):
     """
@@ -394,7 +395,7 @@ def prepare_data_pipeline(embedder_type: str = None, is_ollama_embedder: bool = 
     # Handle backward compatibility
     if embedder_type is None and is_ollama_embedder is not None:
         embedder_type = 'ollama' if is_ollama_embedder else None
-    
+
     # Determine embedder type if not specified
     if embedder_type is None:
         embedder_type = get_embedder_type()
@@ -443,16 +444,35 @@ def transform_documents_and_save_to_db(
     db.load(documents)
     db.transform(key="split_and_embed")
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    db.save_state(filepath=db_path)
+
+    # Try to save the database, handle pickle errors
+    try:
+        db.save_state(filepath=db_path)
+    except (pickle.PickleError, TypeError, AttributeError) as e:
+        # Handle pickle errors (e.g., cannot pickle '_thread.RLock' object)
+        error_msg = str(e)
+        if 'RLock' in error_msg or 'pickle' in error_msg.lower():
+            logger.error(f"Error saving database (pickle error): {e}")
+            logger.warning("Cannot save database due to unpicklable objects. This is usually caused by client objects with thread locks.")
+            logger.info("Database will be regenerated on next load. Continuing without saving...")
+            # Don't raise - allow the function to return the db object even if we can't save it
+            # The database will be regenerated next time
+        else:
+            # Re-raise if it's a different error
+            raise
+    except Exception as e:
+        # Log other errors but don't fail completely
+        logger.warning(f"Error saving database: {e}. Database will be regenerated on next load.")
+
     return db
 
 def get_github_file_content(repo_url: str, file_path: str, access_token: str = None) -> str:
     """
     Retrieves the content of a file from a GitHub repository using the GitHub API.
     Supports both public GitHub (github.com) and GitHub Enterprise (custom domains).
-    
+
     Args:
-        repo_url (str): The URL of the GitHub repository 
+        repo_url (str): The URL of the GitHub repository
                        (e.g., "https://github.com/username/repo" or "https://github.company.com/username/repo")
         file_path (str): The path to the file within the repository (e.g., "src/main.py")
         access_token (str, optional): GitHub personal access token for private repositories
@@ -484,7 +504,7 @@ def get_github_file_content(repo_url: str, file_path: str, access_token: str = N
         else:
             # GitHub Enterprise - API is typically at https://domain/api/v3/
             api_base = f"{parsed_url.scheme}://{parsed_url.netloc}/api/v3"
-        
+
         # Use GitHub API to get file content
         # The API endpoint for getting file content is: /repos/{owner}/{repo}/contents/{path}
         api_url = f"{api_base}/repos/{owner}/{repo}/contents/{file_path}"
@@ -565,7 +585,7 @@ def get_gitlab_file_content(repo_url: str, file_path: str, access_token: str = N
             project_headers = {}
             if access_token:
                 project_headers["PRIVATE-TOKEN"] = access_token
-            
+
             project_response = requests.get(project_info_url, headers=project_headers)
             if project_response.status_code == 200:
                 project_data = project_response.json()
@@ -636,7 +656,7 @@ def get_bitbucket_file_content(repo_url: str, file_path: str, access_token: str 
             repo_headers = {}
             if access_token:
                 repo_headers["Authorization"] = f"Bearer {access_token}"
-            
+
             repo_response = requests.get(repo_info_url, headers=repo_headers)
             if repo_response.status_code == 200:
                 repo_data = repo_response.json()
@@ -742,7 +762,7 @@ class DatabaseManager:
         # Handle backward compatibility
         if embedder_type is None and is_ollama_embedder is not None:
             embedder_type = 'ollama' if is_ollama_embedder else None
-        
+
         self.reset_database()
         self._create_repo(repo_url_or_path, repo_type, access_token)
         return self.prepare_db_index(embedder_type=embedder_type, excluded_dirs=excluded_dirs, excluded_files=excluded_files,
@@ -788,7 +808,7 @@ class DatabaseManager:
         try:
             # Strip whitespace to handle URLs with leading/trailing spaces
             repo_url_or_path = repo_url_or_path.strip()
-            
+
             root_path = get_adalflow_default_root_path()
 
             os.makedirs(root_path, exist_ok=True)
@@ -825,7 +845,7 @@ class DatabaseManager:
             logger.error(f"Failed to create repository structure: {e}")
             raise
 
-    def prepare_db_index(self, embedder_type: str = None, is_ollama_embedder: bool = None, 
+    def prepare_db_index(self, embedder_type: str = None, is_ollama_embedder: bool = None,
                         excluded_dirs: List[str] = None, excluded_files: List[str] = None,
                         included_dirs: List[str] = None, included_files: List[str] = None) -> List[Document]:
         """
@@ -857,7 +877,20 @@ class DatabaseManager:
                     logger.info(f"Loaded {len(documents)} documents from existing database")
                     return documents
             except Exception as e:
-                logger.error(f"Error loading existing database: {e}")
+                # Handle all errors when loading database, especially pickle errors
+                error_msg = str(e)
+                if 'RLock' in error_msg or 'pickle' in error_msg.lower() or isinstance(e, (pickle.PickleError, TypeError, AttributeError)):
+                    # Handle pickle errors (e.g., cannot pickle '_thread.RLock' object)
+                    logger.error(f"Error loading existing database (pickle error): {e}")
+                    logger.warning("Database file appears corrupted or incompatible. Regenerating database...")
+                    # Delete the corrupted database file
+                    try:
+                        os.remove(self.repo_paths["save_db_file"])
+                        logger.info(f"Removed corrupted database file: {self.repo_paths['save_db_file']}")
+                    except Exception as remove_error:
+                        logger.warning(f"Could not remove corrupted database file: {remove_error}")
+                else:
+                    logger.error(f"Error loading existing database: {e}")
                 # Continue to create a new database
 
         # prepare the database

@@ -298,7 +298,7 @@ export default function RepoWikiPage() {
     try {
       const url = new URL(repoUrl);
       const hostname = url.hostname;
-      
+
       if (hostname === 'github.com' || hostname.includes('github')) {
         // GitHub URL format: https://github.com/owner/repo/blob/branch/path
         return `${repoUrl}/blob/${defaultBranch}/${filePath}`;
@@ -513,7 +513,7 @@ IMPORTANT: Generate the content in ${language === 'en' ? 'English' :
             language === 'zh-tw' ? 'Traditional Chinese (繁體中文)' :
             language === 'es' ? 'Spanish (Español)' :
             language === 'kr' ? 'Korean (한국어)' :
-            language === 'vi' ? 'Vietnamese (Tiếng Việt)' : 
+            language === 'vi' ? 'Vietnamese (Tiếng Việt)' :
             language === "pt-br" ? "Brazilian Portuguese (Português Brasileiro)" :
             language === "fr" ? "Français (French)" :
             language === "ru" ? "Русский (Russian)" :
@@ -942,10 +942,30 @@ IMPORTANT:
         // Clean up markdown delimiters
       responseText = responseText.replace(/^```(?:xml)?\s*/i, '').replace(/```\s*$/i, '');
 
+      // Log the response for debugging (first 500 chars)
+      console.log('AI Response (first 500 chars):', responseText.substring(0, 500));
+
       // Extract wiki structure from response
       const xmlMatch = responseText.match(/<wiki_structure>[\s\S]*?<\/wiki_structure>/m);
       if (!xmlMatch) {
-        throw new Error('No valid XML found in response');
+        // Log more details about what we received
+        console.error('No valid XML found in response. Response length:', responseText.length);
+        console.error('Response preview:', responseText.substring(0, 1000));
+
+        // Check if there's an error message in the response
+        if (responseText.includes('error') || responseText.includes('Error')) {
+          const errorMatch = responseText.match(/(?:error|Error)[^]*?$/i);
+          if (errorMatch) {
+            throw new Error(`Error from AI model: ${errorMatch[0].substring(0, 200)}`);
+          }
+        }
+
+        // Check if response is empty or too short
+        if (responseText.trim().length < 50) {
+          throw new Error('AI model returned an empty or very short response. Please check your API keys and model configuration.');
+        }
+
+        throw new Error(`No valid XML found in response. The AI model may not have followed the format instructions. Response preview: ${responseText.substring(0, 300)}...`);
       }
 
       let xmlText = xmlMatch[0];
@@ -1218,16 +1238,16 @@ IMPORTANT:
           if (!repoUrl) {
             return 'https://api.github.com'; // Default to public GitHub
           }
-          
+
           try {
             const url = new URL(repoUrl);
             const hostname = url.hostname;
-            
+
             // If it's the public GitHub, use the standard API URL
             if (hostname === 'github.com') {
               return 'https://api.github.com';
             }
-            
+
             // For GitHub Enterprise, use the enterprise API URL format
             // GitHub Enterprise API URL format: https://github.company.com/api/v3
             return `${url.protocol}//${hostname}/api/v3`;
@@ -1243,7 +1263,7 @@ IMPORTANT:
           const repoInfoResponse = await fetch(`${githubApiBaseUrl}/repos/${owner}/${repo}`, {
             headers: createGithubHeaders(currentToken)
           });
-          
+
           if (repoInfoResponse.ok) {
             const repoData = await repoInfoResponse.json();
             defaultBranchLocal = repoData.default_branch;
@@ -1256,7 +1276,7 @@ IMPORTANT:
         }
 
         // Create list of branches to try, prioritizing the actual default branch
-        const branchesToTry = defaultBranchLocal 
+        const branchesToTry = defaultBranchLocal
           ? [defaultBranchLocal, 'main', 'master'].filter((branch, index, arr) => arr.indexOf(branch) === index)
           : ['main', 'master'];
 
@@ -1353,7 +1373,7 @@ IMPORTANT:
           // Step 2: Paginate to fetch full file tree
           let page = 1;
           let morePages = true;
-          
+
           while (morePages) {
             const apiUrl = `${projectInfoUrl}/repository/tree?recursive=true&per_page=100&page=${page}`;
             const response = await fetch(apiUrl, { headers });
@@ -1844,7 +1864,7 @@ IMPORTANT:
               setGeneratedPages(cachedData.generated_pages);
               setCurrentPageId(cachedStructure.pages.length > 0 ? cachedStructure.pages[0].id : undefined);
               setIsLoading(false);
-              setEmbeddingError(false); 
+              setEmbeddingError(false);
               setLoadingMessage(undefined);
               cacheLoadedSuccessfully.current = true;
               return; // Exit if cache is successfully loaded

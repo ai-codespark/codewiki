@@ -179,7 +179,7 @@ class RAG(adal.Component):
         if self.is_ollama_embedder:
             from api.ollama_patch import check_ollama_model_exists
             from api.config import get_embedder_config
-            
+
             embedder_config = get_embedder_config()
             if embedder_config and embedder_config.get("model_kwargs", {}).get("model"):
                 model_name = embedder_config["model_kwargs"]["model"]
@@ -357,18 +357,70 @@ IMPORTANT FORMATTING RULES:
             included_dirs: Optional list of directories to include exclusively
             included_files: Optional list of file patterns to include exclusively
         """
+        import pickle
         self.initialize_db_manager()
         self.repo_url_or_path = repo_url_or_path
-        self.transformed_docs = self.db_manager.prepare_database(
-            repo_url_or_path,
-            type,
-            access_token,
-            embedder_type=self.embedder_type,
-            excluded_dirs=excluded_dirs,
-            excluded_files=excluded_files,
-            included_dirs=included_dirs,
-            included_files=included_files
-        )
+
+        try:
+            self.transformed_docs = self.db_manager.prepare_database(
+                repo_url_or_path,
+                type,
+                access_token,
+                embedder_type=self.embedder_type,
+                excluded_dirs=excluded_dirs,
+                excluded_files=excluded_files,
+                included_dirs=included_dirs,
+                included_files=included_files
+            )
+        except Exception as e:
+            error_msg = str(e)
+            # Check if it's a pickle error
+            if 'RLock' in error_msg or 'pickle' in error_msg.lower() or isinstance(e, (pickle.PickleError, TypeError)):
+                logger.error(f"Pickle error preparing retriever: {e}")
+                # Try to delete the corrupted database and retry once
+                try:
+                    from api.data_pipeline import get_adalflow_default_root_path
+                    from urllib.parse import urlparse
+                    import os
+
+                    # Extract repo name
+                    if repo_url_or_path.startswith("https://") or repo_url_or_path.startswith("http://"):
+                        url_parts = repo_url_or_path.rstrip('/').split('/')
+                        if len(url_parts) >= 5:
+                            owner = url_parts[-2]
+                            repo = url_parts[-1].replace(".git", "")
+                            repo_name = f"{owner}_{repo}"
+                        else:
+                            repo_name = url_parts[-1].replace(".git", "")
+                    else:
+                        repo_name = os.path.basename(repo_url_or_path)
+
+                    root_path = get_adalflow_default_root_path()
+                    db_file = os.path.join(root_path, "databases", f"{repo_name}.pkl")
+
+                    if os.path.exists(db_file):
+                        logger.warning(f"Removing corrupted database file: {db_file}")
+                        os.remove(db_file)
+                        logger.info("Retrying database preparation after removing corrupted file...")
+                        # Retry once
+                        self.transformed_docs = self.db_manager.prepare_database(
+                            repo_url_or_path,
+                            type,
+                            access_token,
+                            embedder_type=self.embedder_type,
+                            excluded_dirs=excluded_dirs,
+                            excluded_files=excluded_files,
+                            included_dirs=included_dirs,
+                            included_files=included_files
+                        )
+                    else:
+                        raise
+                except Exception as retry_error:
+                    logger.error(f"Error during retry after pickle error: {retry_error}")
+                    raise ValueError(f"Error preparing retriever: Database file is corrupted and cannot be regenerated. Please delete the database file manually and try again. Error: {e}")
+            else:
+                # Re-raise if it's not a pickle error
+                raise
         logger.info(f"Loaded {len(self.transformed_docs)} documents for retrieval")
 
         # Validate and filter embeddings to ensure consistent sizes

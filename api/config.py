@@ -158,7 +158,7 @@ def load_embedder_config():
     embedder_config = load_json_config("embedder.json")
 
     # Process client classes
-    for key in ["embedder", "embedder_ollama", "embedder_google"]:
+    for key in ["embedder", "embedder_ollama", "embedder_google", "embedder_litellm"]:
         if key in embedder_config and "client_class" in embedder_config[key]:
             class_name = embedder_config[key]["client_class"]
             if class_name in CLIENT_CLASSES:
@@ -178,6 +178,8 @@ def get_embedder_config():
         return configs.get("embedder_google", {})
     elif embedder_type == 'ollama' and 'embedder_ollama' in configs:
         return configs.get("embedder_ollama", {})
+    elif embedder_type == 'litellm' and 'embedder_litellm' in configs:
+        return configs.get("embedder_litellm", {})
     else:
         return configs.get("embedder", {})
 
@@ -221,17 +223,45 @@ def is_google_embedder():
     client_class = embedder_config.get("client_class", "")
     return client_class == "GoogleEmbedderClient"
 
+def is_litellm_embedder():
+    """
+    Check if the current embedder configuration uses LiteLLMClient.
+
+    Returns:
+        bool: True if using LiteLLMClient, False otherwise
+    """
+    embedder_config = get_embedder_config()
+    if not embedder_config:
+        return False
+
+    # Check if model_client is LiteLLMClient
+    model_client = embedder_config.get("model_client")
+    if model_client:
+        return model_client.__name__ == "LiteLLMClient"
+
+    # Fallback: check client_class string
+    client_class = embedder_config.get("client_class", "")
+    return client_class == "LiteLLMClient"
+
 def get_embedder_type():
     """
     Get the current embedder type based on configuration.
 
     Returns:
-        str: 'ollama', 'google', or 'openai' (default)
+        str: 'ollama', 'google', 'litellm', or 'openai' (default)
     """
+    # First check environment variable
+    embedder_type = EMBEDDER_TYPE
+    if embedder_type in ['ollama', 'google', 'litellm', 'openai']:
+        return embedder_type
+
+    # Fallback to config-based detection
     if is_ollama_embedder():
         return 'ollama'
     elif is_google_embedder():
         return 'google'
+    elif is_litellm_embedder():
+        return 'litellm'
     else:
         return 'openai'
 
@@ -325,7 +355,7 @@ if generator_config:
 
 # Update embedder configuration
 if embedder_config:
-    for key in ["embedder", "embedder_ollama", "embedder_google", "retriever", "text_splitter"]:
+    for key in ["embedder", "embedder_ollama", "embedder_google", "embedder_litellm", "retriever", "text_splitter"]:
         if key in embedder_config:
             configs[key] = embedder_config[key]
 
