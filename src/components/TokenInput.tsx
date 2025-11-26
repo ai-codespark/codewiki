@@ -4,10 +4,12 @@ import React from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface TokenInputProps {
-  selectedPlatform: 'github' | 'gitlab' | 'bitbucket';
-  setSelectedPlatform: (value: 'github' | 'gitlab' | 'bitbucket') => void;
+  selectedPlatform: 'github' | 'gitlab' | 'bitbucket' | 'gerrit';
+  setSelectedPlatform: (value: 'github' | 'gitlab' | 'bitbucket' | 'gerrit') => void;
   accessToken: string;
   setAccessToken: (value: string) => void;
+  gerritUser?: string;
+  setGerritUser?: (value: string) => void;
   showTokenSection?: boolean;
   onToggleTokenSection?: () => void;
   allowPlatformChange?: boolean;
@@ -18,6 +20,8 @@ export default function TokenInput({
   setSelectedPlatform,
   accessToken,
   setAccessToken,
+  gerritUser = '',
+  setGerritUser,
   showTokenSection = true,
   onToggleTokenSection,
   allowPlatformChange = true
@@ -76,7 +80,34 @@ export default function TokenInput({
                 >
                   <span className="text-sm">Bitbucket</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPlatform('gerrit')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border transition-all ${selectedPlatform === 'gerrit'
+                    ? 'bg-[var(--accent-primary)]/10 border-[var(--accent-primary)] text-[var(--accent-primary)] shadow-sm'
+                    : 'border-[var(--border-color)] text-[var(--foreground)] hover:bg-[var(--background)]'
+                    }`}
+                >
+                  <span className="text-sm">Gerrit</span>
+                </button>
               </div>
+            </div>
+          )}
+
+          {/* Gerrit User field - only show when Gerrit is selected */}
+          {selectedPlatform === 'gerrit' && setGerritUser && (
+            <div className="mb-3">
+              <label htmlFor="gerrit-user" className="block text-xs font-medium text-[var(--foreground)] mb-2">
+                {t.form?.gerritUser || 'Gerrit User'}
+              </label>
+              <input
+                id="gerrit-user"
+                type="text"
+                value={gerritUser}
+                onChange={(e) => setGerritUser(e.target.value)}
+                placeholder={t.form?.gerritUserPlaceholder || 'Enter your Gerrit username'}
+                className="input-japanese block w-full px-3 py-2 rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)] text-sm"
+              />
             </div>
           )}
 

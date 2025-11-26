@@ -37,7 +37,7 @@ interface ModelSelectionModalProps {
   
   // Token input for refresh
   showTokenInput?: boolean;
-  repositoryType?: 'github' | 'gitlab' | 'bitbucket';
+  repositoryType?: 'github' | 'gitlab' | 'bitbucket' | 'gerrit';
   // Authentication
   authRequired?: boolean;
   authCode?: string;
@@ -91,7 +91,8 @@ export default function ModelSelectionModal({
   
   // Token input state
   const [localAccessToken, setLocalAccessToken] = useState('');
-  const [localSelectedPlatform, setLocalSelectedPlatform] = useState<'github' | 'gitlab' | 'bitbucket'>(repositoryType);
+  const [localSelectedPlatform, setLocalSelectedPlatform] = useState<'github' | 'gitlab' | 'bitbucket' | 'gerrit'>(repositoryType);
+  const [localGerritUser, setLocalGerritUser] = useState('');
   const [showTokenSection, setShowTokenSection] = useState(showTokenInput);
 
   // Reset local state when modal is opened
@@ -198,6 +199,8 @@ export default function ModelSelectionModal({
                   setSelectedPlatform={setLocalSelectedPlatform}
                   accessToken={localAccessToken}
                   setAccessToken={setLocalAccessToken}
+                  gerritUser={localGerritUser}
+                  setGerritUser={setLocalGerritUser}
                   showTokenSection={showTokenSection}
                   onToggleTokenSection={() => setShowTokenSection(!showTokenSection)}
                   allowPlatformChange={false} // Don't allow platform change during refresh

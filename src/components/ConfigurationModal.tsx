@@ -32,12 +32,16 @@ interface ConfigurationModalProps {
   setCustomModel: (value: string) => void;
 
   // Platform selection
-  selectedPlatform: 'github' | 'gitlab' | 'bitbucket';
-  setSelectedPlatform: (value: 'github' | 'gitlab' | 'bitbucket') => void;
+  selectedPlatform: 'github' | 'gitlab' | 'bitbucket' | 'gerrit';
+  setSelectedPlatform: (value: 'github' | 'gitlab' | 'bitbucket' | 'gerrit') => void;
 
   // Access token
   accessToken: string;
   setAccessToken: (value: string) => void;
+
+  // Gerrit user
+  gerritUser?: string;
+  setGerritUser?: (value: string) => void;
 
   // File filter options
   excludedDirs: string;
@@ -81,6 +85,8 @@ export default function ConfigurationModal({
   setSelectedPlatform,
   accessToken,
   setAccessToken,
+  gerritUser,
+  setGerritUser,
   excludedDirs,
   setExcludedDirs,
   excludedFiles,
@@ -237,6 +243,8 @@ export default function ConfigurationModal({
               setSelectedPlatform={setSelectedPlatform}
               accessToken={accessToken}
               setAccessToken={setAccessToken}
+              gerritUser={gerritUser}
+              setGerritUser={setGerritUser}
               showTokenSection={showTokenSection}
               onToggleTokenSection={() => setShowTokenSection(!showTokenSection)}
               allowPlatformChange={true}

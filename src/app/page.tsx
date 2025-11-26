@@ -94,6 +94,7 @@ export default function Home() {
           setIsCustomModel(config.isCustomModel || false);
           setCustomModel(config.customModel || '');
           setSelectedPlatform(config.selectedPlatform || 'github');
+          setGerritUser(config.gerritUser || '');
           setExcludedDirs(config.excludedDirs || '');
           setExcludedFiles(config.excludedFiles || '');
           setIncludedDirs(config.includedDirs || '');
@@ -134,8 +135,9 @@ export default function Home() {
   const [excludedFiles, setExcludedFiles] = useState('');
   const [includedDirs, setIncludedDirs] = useState('');
   const [includedFiles, setIncludedFiles] = useState('');
-  const [selectedPlatform, setSelectedPlatform] = useState<'github' | 'gitlab' | 'bitbucket'>('github');
+  const [selectedPlatform, setSelectedPlatform] = useState<'github' | 'gitlab' | 'bitbucket' | 'gerrit'>('github');
   const [accessToken, setAccessToken] = useState('');
+  const [gerritUser, setGerritUser] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<string>(language);
@@ -318,6 +320,7 @@ export default function Home() {
           isCustomModel,
           customModel,
           selectedPlatform,
+          gerritUser,
           excludedDirs,
           excludedFiles,
           includedDirs,
@@ -347,6 +350,10 @@ export default function Home() {
     const params = new URLSearchParams();
     if (accessToken) {
       params.append('token', accessToken);
+    }
+    // Add Gerrit user if Gerrit is selected and user is provided
+    if (selectedPlatform === 'gerrit' && gerritUser) {
+      params.append('gerrit_user', gerritUser);
     }
     // Always include the type parameter
     params.append('type', (type == 'local' ? type : selectedPlatform) || 'github');
@@ -462,6 +469,8 @@ export default function Home() {
             setSelectedPlatform={setSelectedPlatform}
             accessToken={accessToken}
             setAccessToken={setAccessToken}
+            gerritUser={gerritUser}
+            setGerritUser={setGerritUser}
             excludedDirs={excludedDirs}
             setExcludedDirs={setExcludedDirs}
             excludedFiles={excludedFiles}
