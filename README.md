@@ -195,6 +195,7 @@ DeepWiki now implements a flexible provider-based model selection system support
 - **OpenAI**: Default `gpt-5-nano`, also supports `gpt-5`, `4o`, etc.
 - **OpenRouter**: Access to multiple models via a unified API, including Claude, Llama, Mistral, etc.
 - **Azure OpenAI**: Default `gpt-4o`, also supports `o4-mini`, etc.
+- **LiteLLM**: Access to multiple models via LiteLLM proxy, supports OpenAI-compatible models
 - **Ollama**: Support for locally running open-source models like `llama3`
 
 ### Environment Variables
@@ -209,6 +210,8 @@ OPENROUTER_API_KEY=your_openrouter_api_key # Required for OpenRouter models
 AZURE_OPENAI_API_KEY=your_azure_openai_api_key  #Required for Azure OpenAI models
 AZURE_OPENAI_ENDPOINT=your_azure_openai_endpoint  #Required for Azure OpenAI models
 AZURE_OPENAI_VERSION=your_azure_openai_version  #Required for Azure OpenAI models
+LITELLM_API_KEY=your_litellm_api_key      # Required for LiteLLM models
+LITELLM_BASE_URL=your_litellm_base_url    # Required for LiteLLM models (e.g., http://localhost:4000)
 
 # OpenAI API Base URL Configuration
 OPENAI_BASE_URL=https://custom-api-endpoint.com/v1  # Optional, for custom OpenAI API endpoints
@@ -225,7 +228,7 @@ DEEPWIKI_CONFIG_DIR=/path/to/custom/config/dir  # Optional, for custom config fi
 DeepWiki uses JSON configuration files to manage various aspects of the system:
 
 1. **`generator.json`**: Configuration for text generation models
-   - Defines available model providers (Google, OpenAI, OpenRouter, Azure, Ollama)
+   - Defines available model providers (Google, OpenAI, OpenRouter, Azure, LiteLLM, Ollama)
    - Specifies default and available models for each provider
    - Contains model-specific parameters like temperature and top_p
 
@@ -399,9 +402,11 @@ docker-compose up
 
 | Variable             | Description                                                  | Required | Note                                                                                                     |
 |----------------------|--------------------------------------------------------------|----------|----------------------------------------------------------------------------------------------------------|
-| `GOOGLE_API_KEY`     | Google Gemini API key for AI generation and embeddings      | No | Required for Google Gemini models and Google AI embeddings                                               
+| `GOOGLE_API_KEY`     | Google Gemini API key for AI generation and embeddings      | No | Required for Google Gemini models and Google AI embeddings
 | `OPENAI_API_KEY`     | OpenAI API key for embeddings and models                     | Conditional | Required if using OpenAI embeddings or models                                                            |
 | `OPENROUTER_API_KEY` | OpenRouter API key for alternative models                    | No | Required only if you want to use OpenRouter models                                                       |
+| `LITELLM_API_KEY` | LiteLLM API key for LiteLLM proxy models                    | No | Required only if you want to use LiteLLM models                                                       |
+| `LITELLM_BASE_URL` | LiteLLM base URL (e.g., http://localhost:4000)                    | No | Required only if you want to use LiteLLM models                                                       |
 | `AZURE_OPENAI_API_KEY` | Azure OpenAI API key                    | No | Required only if you want to use Azure OpenAI models                                                       |
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint                    | No | Required only if you want to use Azure OpenAI models                                                       |
 | `AZURE_OPENAI_VERSION` | Azure OpenAI version                     | No | Required only if you want to use Azure OpenAI models                                                       |
@@ -414,7 +419,7 @@ docker-compose up
 
 **API Key Requirements:**
 - If using `DEEPWIKI_EMBEDDER_TYPE=openai` (default): `OPENAI_API_KEY` is required
-- If using `DEEPWIKI_EMBEDDER_TYPE=google`: `GOOGLE_API_KEY` is required  
+- If using `DEEPWIKI_EMBEDDER_TYPE=google`: `GOOGLE_API_KEY` is required
 - If using `DEEPWIKI_EMBEDDER_TYPE=ollama`: No API key required (local processing)
 
 Other API keys are only required when configuring and using models from the corresponding providers.

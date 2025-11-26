@@ -13,12 +13,15 @@ from api.bedrock_client import BedrockClient
 from api.google_embedder_client import GoogleEmbedderClient
 from api.azureai_client import AzureAIClient
 from api.dashscope_client import DashscopeClient
+from api.litellm_client import LiteLLMClient
 from adalflow import GoogleGenAIClient, OllamaClient
 
 # Get API keys from environment variables
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
 OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
+LITELLM_API_KEY = os.environ.get('LITELLM_API_KEY')
+LITELLM_BASE_URL = os.environ.get('LITELLM_BASE_URL')
 AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
 AWS_REGION = os.environ.get('AWS_REGION')
@@ -31,6 +34,10 @@ if GOOGLE_API_KEY:
     os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
 if OPENROUTER_API_KEY:
     os.environ["OPENROUTER_API_KEY"] = OPENROUTER_API_KEY
+if LITELLM_API_KEY:
+    os.environ["LITELLM_API_KEY"] = LITELLM_API_KEY
+if LITELLM_BASE_URL:
+    os.environ["LITELLM_BASE_URL"] = LITELLM_BASE_URL
 if AWS_ACCESS_KEY_ID:
     os.environ["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
 if AWS_SECRET_ACCESS_KEY:
@@ -60,7 +67,8 @@ CLIENT_CLASSES = {
     "OllamaClient": OllamaClient,
     "BedrockClient": BedrockClient,
     "AzureAIClient": AzureAIClient,
-    "DashscopeClient": DashscopeClient
+    "DashscopeClient": DashscopeClient,
+    "LiteLLMClient": LiteLLMClient
 }
 
 def replace_env_placeholders(config: Union[Dict[str, Any], List[Any], str, Any]) -> Union[Dict[str, Any], List[Any], str, Any]:
@@ -128,7 +136,7 @@ def load_generator_config():
             if provider_config.get("client_class") in CLIENT_CLASSES:
                 provider_config["model_client"] = CLIENT_CLASSES[provider_config["client_class"]]
             # Fall back to default mapping based on provider_id
-            elif provider_id in ["google", "openai", "openrouter", "ollama", "bedrock", "azure", "dashscope"]:
+            elif provider_id in ["google", "openai", "openrouter", "ollama", "bedrock", "azure", "dashscope", "litellm"]:
                 default_map = {
                     "google": GoogleGenAIClient,
                     "openai": OpenAIClient,
@@ -136,7 +144,8 @@ def load_generator_config():
                     "ollama": OllamaClient,
                     "bedrock": BedrockClient,
                     "azure": AzureAIClient,
-                    "dashscope": DashscopeClient
+                    "dashscope": DashscopeClient,
+                    "litellm": LiteLLMClient
                 }
                 provider_config["model_client"] = default_map[provider_id]
             else:
@@ -215,7 +224,7 @@ def is_google_embedder():
 def get_embedder_type():
     """
     Get the current embedder type based on configuration.
-    
+
     Returns:
         str: 'ollama', 'google', or 'openai' (default)
     """

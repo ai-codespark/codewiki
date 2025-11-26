@@ -44,6 +44,7 @@
     "providerGoogle": "Google",
     "providerOpenAI": "OpenAI",
     "providerOpenRouter": "OpenRouter",
+    "providerLiteLLM": "LiteLLM",
     "providerOllama": "Ollama（ローカル）",
     "localOllama": "ローカルOllamaモデル",
     "experimental": "実験的",

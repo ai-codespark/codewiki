@@ -9,6 +9,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 import google.generativeai as genai
 import asyncio
+import aiohttp
 
 # Configure logging
 from api.logging_config import setup_logging
@@ -164,6 +165,68 @@ async def validate_auth_code(request: AuthorizationConfig):
     """
     return {"success": WIKI_AUTH_CODE == request.code}
 
+async def fetch_litellm_models() -> List[Model]:
+    """
+    Fetch available models from LiteLLM's /v1/models endpoint.
+
+    Returns:
+        List[Model]: List of available models from LiteLLM
+    """
+    from api.config import LITELLM_API_KEY, LITELLM_BASE_URL
+
+    if not LITELLM_BASE_URL or not LITELLM_API_KEY:
+        logger.warning("LITELLM_BASE_URL or LITELLM_API_KEY not configured, skipping LiteLLM model fetch")
+        return []
+
+    try:
+        # Ensure base URL ends with /v1
+        base_url = LITELLM_BASE_URL.rstrip('/')
+        if not base_url.endswith('/v1'):
+            base_url = f"{base_url}/v1"
+
+        models_endpoint = f"{base_url}/models"
+
+        headers = {
+            'Authorization': f'Bearer {LITELLM_API_KEY}',
+            'Content-Type': 'application/json'
+        }
+
+        logger.info(f"Fetching models from LiteLLM: {models_endpoint}")
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(models_endpoint, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                if response.status == 200:
+                    data = await response.json()
+
+                    # LiteLLM returns models in OpenAI-compatible format
+                    # Response structure: {"data": [{"id": "model-name", ...}, ...]}
+                    models = []
+                    if "data" in data and isinstance(data["data"], list):
+                        for model_data in data["data"]:
+                            model_id = model_data.get("id", "")
+                            if model_id:
+                                # Use model ID as both id and name, or extract a better name if available
+                                model_name = model_data.get("name", model_id)
+                                models.append(Model(id=model_id, name=model_name))
+
+                    logger.info(f"Successfully fetched {len(models)} models from LiteLLM")
+                    return models
+                else:
+                    error_text = await response.text()
+                    logger.error(f"Failed to fetch LiteLLM models: {response.status} - {error_text}")
+                    return []
+
+    except asyncio.TimeoutError:
+        logger.error("Timeout while fetching models from LiteLLM")
+        return []
+    except aiohttp.ClientError as e:
+        logger.error(f"Client error while fetching models from LiteLLM: {str(e)}")
+        return []
+    except Exception as e:
+        logger.error(f"Error fetching models from LiteLLM: {str(e)}")
+        return []
+
+
 @app.get("/models/config", response_model=ModelConfig)
 async def get_model_config():
     """
@@ -171,6 +234,7 @@ async def get_model_config():
 
     This endpoint returns the configuration of available model providers and their
     respective models that can be used throughout the application.
+    For LiteLLM provider, models are fetched dynamically from the LiteLLM /v1/models endpoint.
 
     Returns:
         ModelConfig: A configuration object containing providers and their models
@@ -185,16 +249,37 @@ async def get_model_config():
         # Add provider configuration based on config.py
         for provider_id, provider_config in configs["providers"].items():
             models = []
-            # Add models from config
-            for model_id in provider_config["models"].keys():
-                # Get a more user-friendly display name if possible
-                models.append(Model(id=model_id, name=model_id))
+
+            # For LiteLLM provider, fetch models dynamically from the API
+            if provider_id == "litellm":
+                logger.info("Fetching models dynamically for LiteLLM provider")
+                litellm_models = await fetch_litellm_models()
+
+                if litellm_models:
+                    # Use dynamically fetched models
+                    models = litellm_models
+                    logger.info(f"Using {len(models)} dynamically fetched models for LiteLLM")
+                else:
+                    # Fallback to config file models if API fetch fails
+                    logger.warning("Failed to fetch LiteLLM models from API, falling back to config file models")
+                    for model_id in provider_config["models"].keys():
+                        models.append(Model(id=model_id, name=model_id))
+            else:
+                # For other providers, use models from config file
+                for model_id in provider_config["models"].keys():
+                    # Get a more user-friendly display name if possible
+                    models.append(Model(id=model_id, name=model_id))
 
             # Add provider with its models
+            # Handle special case for LiteLLM capitalization
+            provider_name = provider_id.capitalize()
+            if provider_id == "litellm":
+                provider_name = "LiteLLM"
+
             providers.append(
                 Provider(
                     id=provider_id,
-                    name=f"{provider_id.capitalize()}",
+                    name=provider_name,
                     supportsCustomModel=provider_config.get("supportsCustomModel", False),
                     models=models
                 )

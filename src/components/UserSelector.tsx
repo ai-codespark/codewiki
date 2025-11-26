@@ -288,11 +288,18 @@ next.config.js
             className="input-japanese block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
           >
             <option value="" disabled>{t.form?.selectProvider || 'Select Provider'}</option>
-            {modelConfig?.providers.map((providerOption) => (
-              <option key={providerOption.id} value={providerOption.id}>
-                {t.form?.[`provider${providerOption.id.charAt(0).toUpperCase() + providerOption.id.slice(1)}`] || providerOption.name}
-              </option>
-            ))}
+            {modelConfig?.providers.map((providerOption) => {
+              // Handle special case for LiteLLM capitalization
+              let providerKey = providerOption.id.charAt(0).toUpperCase() + providerOption.id.slice(1);
+              if (providerOption.id === "litellm") {
+                providerKey = "LiteLLM";
+              }
+              return (
+                <option key={providerOption.id} value={providerOption.id}>
+                  {t.form?.[`provider${providerKey}`] || providerOption.name}
+                </option>
+              );
+            })}
           </select>
         </div>
 

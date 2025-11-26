@@ -30,6 +30,8 @@ OPENAI_API_KEY=your_openai_api_key        # Required for embeddings and OpenAI m
 
 # Optional API Keys
 OPENROUTER_API_KEY=your_openrouter_api_key  # Required only if using OpenRouter models
+LITELLM_API_KEY=your_litellm_api_key        # Required only if using LiteLLM models
+LITELLM_BASE_URL=your_litellm_base_url      # Required only if using LiteLLM models (e.g., http://localhost:4000)
 
 # AWS Bedrock Configuration
 AWS_ACCESS_KEY_ID=your_aws_access_key_id      # Required for AWS Bedrock models
@@ -63,6 +65,7 @@ DeepWiki supports multiple LLM providers. The environment variables above are re
 - **Google Gemini**: Requires `GOOGLE_API_KEY`
 - **OpenAI**: Requires `OPENAI_API_KEY`
 - **OpenRouter**: Requires `OPENROUTER_API_KEY`
+- **LiteLLM**: Requires `LITELLM_API_KEY` and `LITELLM_BASE_URL`
 - **AWS Bedrock**: Requires `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
 - **Ollama**: No API key required (runs locally)
 
@@ -83,7 +86,7 @@ DeepWiki now uses JSON configuration files to manage various system components i
 
 1. **`generator.json`**: Configuration for text generation models
    - Located in `api/config/` by default
-   - Defines available model providers (Google, OpenAI, OpenRouter, AWS Bedrock, Ollama)
+   - Defines available model providers (Google, OpenAI, OpenRouter, LiteLLM, AWS Bedrock, Ollama)
    - Specifies default and available models for each provider
    - Contains model-specific parameters like temperature and top_p
 
