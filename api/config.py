@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import re
+import copy
 from pathlib import Path
 from typing import List, Union, Dict, Any
 
@@ -169,19 +170,29 @@ def load_embedder_config():
 def get_embedder_config():
     """
     Get the current embedder configuration based on DEEPWIKI_EMBEDDER_TYPE.
+    The model name is always taken from the configuration in embedder.json.
 
     Returns:
         dict: The embedder configuration with model_client resolved
     """
     embedder_type = EMBEDDER_TYPE
+    logger.info(f"Getting embedder config for type: {embedder_type}")
+
+    # Get base configuration (use deepcopy to avoid modifying original)
     if embedder_type == 'google' and 'embedder_google' in configs:
-        return configs.get("embedder_google", {})
+        config = copy.deepcopy(configs.get("embedder_google", {}))
     elif embedder_type == 'ollama' and 'embedder_ollama' in configs:
-        return configs.get("embedder_ollama", {})
+        config = copy.deepcopy(configs.get("embedder_ollama", {}))
     elif embedder_type == 'litellm' and 'embedder_litellm' in configs:
-        return configs.get("embedder_litellm", {})
+        config = copy.deepcopy(configs.get("embedder_litellm", {}))
+        logger.info(f"LiteLLM embedder config loaded: model={config.get('model_kwargs', {}).get('model', 'unknown')}")
     else:
-        return configs.get("embedder", {})
+        config = copy.deepcopy(configs.get("embedder", {}))
+
+    if 'model_kwargs' in config:
+        logger.info(f"Embedder model_kwargs: {config['model_kwargs']}")
+
+    return config
 
 def is_ollama_embedder():
     """
@@ -246,11 +257,12 @@ def is_litellm_embedder():
 def get_embedder_type():
     """
     Get the current embedder type based on configuration.
+    Returns only the type part, without the model name (e.g., "litellm" not "litellm/model_name").
 
     Returns:
         str: 'ollama', 'google', 'litellm', or 'openai' (default)
     """
-    # First check environment variable
+    # First check environment variable (already parsed to just the type)
     embedder_type = EMBEDDER_TYPE
     if embedder_type in ['ollama', 'google', 'litellm', 'openai']:
         return embedder_type

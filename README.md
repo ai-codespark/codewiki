@@ -356,6 +356,10 @@ export DEEPWIKI_EMBEDDER_TYPE=google
 
 # Use local Ollama embeddings
 export DEEPWIKI_EMBEDDER_TYPE=ollama
+
+# Use LiteLLM proxy embeddings (OpenAI API compatible)
+# Model name is configured in api/config/embedder.json
+export DEEPWIKI_EMBEDDER_TYPE=litellm
 ```
 
 **Note**: When switching embedders, you may need to regenerate your repository embeddings as different models produce different vector spaces.
@@ -411,7 +415,7 @@ docker-compose up
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint                    | No | Required only if you want to use Azure OpenAI models                                                       |
 | `AZURE_OPENAI_VERSION` | Azure OpenAI version                     | No | Required only if you want to use Azure OpenAI models                                                       |
 | `OLLAMA_HOST`        | Ollama Host (default: http://localhost:11434)                | No | Required only if you want to use external Ollama server                                                  |
-| `DEEPWIKI_EMBEDDER_TYPE` | Embedder type: `openai`, `google`, or `ollama` (default: `openai`) | No | Controls which embedding provider to use                                                              |
+| `DEEPWIKI_EMBEDDER_TYPE` | Embedder type: `openai`, `google`, `ollama`, or `litellm` (default: `openai`) | No | Controls which embedding provider to use. Model name is configured in `api/config/embedder.json`                                                              |
 | `PORT`               | Port for the API server (default: 8001)                      | No | If you host API and frontend on the same machine, make sure change port of `SERVER_BASE_URL` accordingly |
 | `SERVER_BASE_URL`    | Base URL for the API server (default: http://localhost:8001) | No |
 | `DEEPWIKI_AUTH_MODE` | Set to `true` or `1` to enable authorization mode. | No | Defaults to `false`. If enabled, `DEEPWIKI_AUTH_CODE` is required. |
@@ -421,6 +425,7 @@ docker-compose up
 - If using `DEEPWIKI_EMBEDDER_TYPE=openai` (default): `OPENAI_API_KEY` is required
 - If using `DEEPWIKI_EMBEDDER_TYPE=google`: `GOOGLE_API_KEY` is required
 - If using `DEEPWIKI_EMBEDDER_TYPE=ollama`: No API key required (local processing)
+- If using `DEEPWIKI_EMBEDDER_TYPE=litellm`: `LITELLM_API_KEY` and `LITELLM_BASE_URL` are required (OpenAI API compatible via LiteLLM proxy). The embedding model name is configured in `api/config/embedder.json`
 
 Other API keys are only required when configuring and using models from the corresponding providers.
 

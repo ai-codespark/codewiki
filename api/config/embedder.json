@@ -27,12 +27,11 @@
     "batch_size": 500,
     "initialize_kwargs": {
       "api_key": "${LITELLM_API_KEY}",
-      "base_url": "${LITELLM_BASE_URL}"
+      "base_url": "${LITELLM_BASE_URL}",
+      "rate_limit_delay": 0.2
     },
     "model_kwargs": {
-      "model": "text-embedding-3-small",
-      "dimensions": 256,
-      "encoding_format": "float"
+      "model": "vercel-gemini-embedding"
     }
   },
   "retriever": {

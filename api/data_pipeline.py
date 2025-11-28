@@ -31,7 +31,7 @@ def count_tokens(text: str, embedder_type: str = None, is_ollama_embedder: bool 
 
     Args:
         text (str): The text to count tokens for.
-        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama').
+        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama', 'litellm').
                                      If None, will be determined from configuration.
         is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                            If None, will be determined from configuration.
@@ -156,7 +156,7 @@ def read_all_documents(path: str, embedder_type: str = None, is_ollama_embedder:
 
     Args:
         path (str): The root directory path.
-        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama').
+        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama', 'litellm').
                                      If None, will be determined from configuration.
         is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                            If None, will be determined from configuration.
@@ -382,7 +382,7 @@ def prepare_data_pipeline(embedder_type: str = None, is_ollama_embedder: bool = 
     Creates and returns the data transformation pipeline.
 
     Args:
-        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama').
+        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama', 'litellm').
                                      If None, will be determined from configuration.
         is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                            If None, will be determined from configuration.
@@ -430,7 +430,7 @@ def transform_documents_and_save_to_db(
     Args:
         documents (list): A list of `Document` objects.
         db_path (str): The path to the local database file.
-        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama').
+        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama', 'litellm').
                                      If None, will be determined from configuration.
         is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                            If None, will be determined from configuration.
@@ -747,7 +747,7 @@ class DatabaseManager:
             repo_type(str): Type of repository
             repo_url_or_path (str): The URL or local path of the repository
             access_token (str, optional): Access token for private repositories
-            embedder_type (str, optional): Embedder type to use ('openai', 'google', 'ollama').
+            embedder_type (str, optional): Embedder type to use ('openai', 'google', 'ollama', 'litellm').
                                          If None, will be determined from configuration.
             is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                                If None, will be determined from configuration.
@@ -852,7 +852,7 @@ class DatabaseManager:
         Prepare the indexed database for the repository.
 
         Args:
-            embedder_type (str, optional): Embedder type to use ('openai', 'google', 'ollama').
+            embedder_type (str, optional): Embedder type to use ('openai', 'google', 'ollama', 'litellm').
                                          If None, will be determined from configuration.
             is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                                If None, will be determined from configuration.
