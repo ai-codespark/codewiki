@@ -403,7 +403,14 @@ def prepare_data_pipeline(embedder_type: str = None, is_ollama_embedder: bool = 
     splitter = TextSplitter(**configs["text_splitter"])
     embedder_config = get_embedder_config()
 
-    embedder = get_embedder(embedder_type=embedder_type)
+    # Check if embedder is configured
+    if embedder_config is None and embedder_type is None:
+        raise ValueError("Embedder not configured. Please set DEEPWIKI_EMBEDDER_TYPE environment variable or provide embedder_type parameter.")
+
+    try:
+        embedder = get_embedder(embedder_type=embedder_type)
+    except ValueError as e:
+        raise ValueError(f"Failed to initialize embedder: {e}")
 
     # Choose appropriate processor based on embedder type
     if embedder_type == 'ollama':
@@ -411,7 +418,7 @@ def prepare_data_pipeline(embedder_type: str = None, is_ollama_embedder: bool = 
         embedder_transformer = OllamaDocumentProcessor(embedder=embedder)
     else:
         # Use batch processing for OpenAI and Google embedders
-        batch_size = embedder_config.get("batch_size", 500)
+        batch_size = embedder_config.get("batch_size", 500) if embedder_config else 500
         embedder_transformer = ToEmbeddings(
             embedder=embedder, batch_size=batch_size
         )

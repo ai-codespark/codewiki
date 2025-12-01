@@ -53,8 +53,10 @@ raw_auth_mode = os.environ.get('DEEPWIKI_AUTH_MODE', 'False')
 WIKI_AUTH_MODE = raw_auth_mode.lower() in ['true', '1', 't']
 WIKI_AUTH_CODE = os.environ.get('DEEPWIKI_AUTH_CODE', '')
 
-# Embedder settings
-EMBEDDER_TYPE = os.environ.get('DEEPWIKI_EMBEDDER_TYPE', 'openai').lower()
+# Embedder settings (optional - if not set, embedder functionality will be disabled)
+EMBEDDER_TYPE = os.environ.get('DEEPWIKI_EMBEDDER_TYPE', '').strip().lower()
+if EMBEDDER_TYPE == '':
+    EMBEDDER_TYPE = None
 
 # Get configuration directory from environment variable, or use default if not set
 CONFIG_DIR = os.environ.get('DEEPWIKI_CONFIG_DIR', None)
@@ -173,9 +175,15 @@ def get_embedder_config():
     The model name is always taken from the configuration in embedder.json.
 
     Returns:
-        dict: The embedder configuration with model_client resolved
+        dict or None: The embedder configuration with model_client resolved, or None if embedder is not configured
     """
     embedder_type = EMBEDDER_TYPE
+
+    # If embedder type is not set, return None
+    if embedder_type is None:
+        logger.info("Embedder type not configured (DEEPWIKI_EMBEDDER_TYPE not set), returning None")
+        return None
+
     logger.info(f"Getting embedder config for type: {embedder_type}")
 
     # Get base configuration (use deepcopy to avoid modifying original)
@@ -187,7 +195,13 @@ def get_embedder_config():
         config = copy.deepcopy(configs.get("embedder_litellm", {}))
         logger.info(f"LiteLLM embedder config loaded: model={config.get('model_kwargs', {}).get('model', 'unknown')}")
     else:
+        # Default to 'openai' if embedder type is set but not recognized
         config = copy.deepcopy(configs.get("embedder", {}))
+
+    # If config is empty, return None
+    if not config:
+        logger.warning(f"Embedder config for type '{embedder_type}' is empty, returning None")
+        return None
 
     if 'model_kwargs' in config:
         logger.info(f"Embedder model_kwargs: {config['model_kwargs']}")
@@ -260,10 +274,12 @@ def get_embedder_type():
     Returns only the type part, without the model name (e.g., "litellm" not "litellm/model_name").
 
     Returns:
-        str: 'ollama', 'google', 'litellm', or 'openai' (default)
+        str or None: 'ollama', 'google', 'litellm', 'openai', or None if not configured
     """
     # First check environment variable (already parsed to just the type)
     embedder_type = EMBEDDER_TYPE
+    if embedder_type is None:
+        return None
     if embedder_type in ['ollama', 'google', 'litellm', 'openai']:
         return embedder_type
 
@@ -275,7 +291,8 @@ def get_embedder_type():
     elif is_litellm_embedder():
         return 'litellm'
     else:
-        return 'openai'
+        # If embedder type is set but not recognized, default to 'openai'
+        return 'openai' if embedder_type else None
 
 # Load repository and file filters configuration
 def load_repo_config():

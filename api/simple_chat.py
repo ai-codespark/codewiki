@@ -201,31 +201,42 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                     # This will use the actual RAG implementation
                     retrieved_documents = request_rag(rag_query, language=request.language)
 
-                    if retrieved_documents and retrieved_documents[0].documents:
-                        # Format context for the prompt in a more structured way
-                        documents = retrieved_documents[0].documents
-                        logger.info(f"Retrieved {len(documents)} documents")
+                    # Handle both RAG mode (with retrieval) and LLM-only mode (without retrieval)
+                    # In RAG mode: retrieved_documents is a list with RetrievalResult objects
+                    # In LLM-only mode: retrieved_documents is a tuple (RAGAnswer, [])
+                    if retrieved_documents:
+                        # Check if we have documents from retrieval
+                        if isinstance(retrieved_documents, tuple):
+                            # LLM-only mode: retrieved_documents is (RAGAnswer, [])
+                            # No documents available, continue without context
+                            logger.info("LLM-only mode: No retrieval context available")
+                        elif hasattr(retrieved_documents[0], 'documents') and retrieved_documents[0].documents:
+                            # RAG mode: Format context for the prompt in a more structured way
+                            documents = retrieved_documents[0].documents
+                            logger.info(f"Retrieved {len(documents)} documents")
 
-                        # Group documents by file path
-                        docs_by_file = {}
-                        for doc in documents:
-                            file_path = doc.meta_data.get('file_path', 'unknown')
-                            if file_path not in docs_by_file:
-                                docs_by_file[file_path] = []
-                            docs_by_file[file_path].append(doc)
+                            # Group documents by file path
+                            docs_by_file = {}
+                            for doc in documents:
+                                file_path = doc.meta_data.get('file_path', 'unknown')
+                                if file_path not in docs_by_file:
+                                    docs_by_file[file_path] = []
+                                docs_by_file[file_path].append(doc)
 
-                        # Format context text with file path grouping
-                        context_parts = []
-                        for file_path, docs in docs_by_file.items():
-                            # Add file header with metadata
-                            header = f"## File Path: {file_path}\n\n"
-                            # Add document content
-                            content = "\n\n".join([doc.text for doc in docs])
+                            # Format context text with file path grouping
+                            context_parts = []
+                            for file_path, docs in docs_by_file.items():
+                                # Add file header with metadata
+                                header = f"## File Path: {file_path}\n\n"
+                                # Add document content
+                                content = "\n\n".join([doc.text for doc in docs])
 
-                            context_parts.append(f"{header}{content}")
+                                context_parts.append(f"{header}{content}")
 
-                        # Join all parts with clear separation
-                        context_text = "\n\n" + "-" * 10 + "\n\n".join(context_parts)
+                            # Join all parts with clear separation
+                            context_text = "\n\n" + "-" * 10 + "\n\n".join(context_parts)
+                        else:
+                            logger.warning("No documents retrieved from RAG")
                     else:
                         logger.warning("No documents retrieved from RAG")
                 except Exception as e:
@@ -432,15 +443,33 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                 model_kwargs=model_kwargs,
                 model_type=ModelType.LLM
             )
-        else:
+        elif request.provider == "google":
             # Initialize Google Generative AI model
+            generation_config = {
+                "temperature": model_config["temperature"],
+                "top_p": model_config["top_p"]
+            }
+            # Only add top_k if it exists in the model config (Google-specific)
+            if "top_k" in model_config:
+                generation_config["top_k"] = model_config["top_k"]
+
             model = genai.GenerativeModel(
                 model_name=model_config["model"],
-                generation_config={
-                    "temperature": model_config["temperature"],
-                    "top_p": model_config["top_p"],
-                    "top_k": model_config["top_k"]
-                }
+                generation_config=generation_config
+            )
+        else:
+            # Fallback: Initialize Google Generative AI model (for backward compatibility)
+            generation_config = {
+                "temperature": model_config["temperature"],
+                "top_p": model_config["top_p"]
+            }
+            # Only add top_k if it exists in the model config
+            if "top_k" in model_config:
+                generation_config["top_k"] = model_config["top_k"]
+
+            model = genai.GenerativeModel(
+                model_name=model_config["model"],
+                generation_config=generation_config
             )
 
         # Create a streaming response
@@ -514,8 +543,29 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                     except Exception as e_azure:
                         logger.error(f"Error with Azure AI API: {str(e_azure)}")
                         yield f"\nError with Azure AI API: {str(e_azure)}\n\nPlease check that you have set the AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, and AZURE_OPENAI_VERSION environment variables with valid values."
-                else:
+                elif request.provider == "litellm":
+                    try:
+                        # Get the response and handle it properly using the previously created api_kwargs
+                        logger.info("Making LiteLLM API call")
+                        response = await model.acall(api_kwargs=api_kwargs, model_type=ModelType.LLM)
+                        # Handle streaming response from LiteLLM
+                        # LiteLLM client already parses the stream and yields strings directly
+                        async for chunk in response:
+                            # chunk is already a parsed string from parse_stream_response
+                            if chunk:
+                                yield chunk
+                    except Exception as e_litellm:
+                        logger.error(f"Error with LiteLLM API: {str(e_litellm)}")
+                        yield f"\nError with LiteLLM API: {str(e_litellm)}\n\nPlease check that you have set the LITELLM_API_KEY and LITELLM_BASE_URL environment variables with valid values."
+                elif request.provider == "google":
                     # Generate streaming response
+                    response = model.generate_content(prompt, stream=True)
+                    # Stream the response
+                    for chunk in response:
+                        if hasattr(chunk, 'text'):
+                            yield chunk.text
+                else:
+                    # Fallback: Generate streaming response using Google Generative AI
                     response = model.generate_content(prompt, stream=True)
                     # Stream the response
                     for chunk in response:

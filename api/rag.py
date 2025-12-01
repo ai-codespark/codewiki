@@ -175,35 +175,49 @@ class RAG(adal.Component):
         self.embedder_type = get_embedder_type()
         self.is_ollama_embedder = (self.embedder_type == 'ollama')  # Backward compatibility
 
-        # Check if Ollama model exists before proceeding
-        if self.is_ollama_embedder:
-            from api.ollama_patch import check_ollama_model_exists
-            from api.config import get_embedder_config
+        # Check if embedder is configured (optional - allows LLM-only mode)
+        embedder_config = get_embedder_config()
+        self.has_embedder = embedder_config is not None and self.embedder_type is not None
 
-            embedder_config = get_embedder_config()
-            if embedder_config and embedder_config.get("model_kwargs", {}).get("model"):
-                model_name = embedder_config["model_kwargs"]["model"]
-                if not check_ollama_model_exists(model_name):
-                    raise Exception(f"Ollama model '{model_name}' not found. Please run 'ollama pull {model_name}' to install it.")
+        # Initialize embedder if configured
+        self.embedder = None
+        self.query_embedder = None
+        if self.has_embedder:
+            # Check if Ollama model exists before proceeding
+            if self.is_ollama_embedder:
+                from api.ollama_patch import check_ollama_model_exists
+
+                if embedder_config and embedder_config.get("model_kwargs", {}).get("model"):
+                    model_name = embedder_config["model_kwargs"]["model"]
+                    if not check_ollama_model_exists(model_name):
+                        raise Exception(f"Ollama model '{model_name}' not found. Please run 'ollama pull {model_name}' to install it.")
+
+            # Initialize components
+            try:
+                self.embedder = get_embedder(embedder_type=self.embedder_type)
+            except ValueError as e:
+                logger.warning(f"Failed to initialize embedder: {e}. Continuing in LLM-only mode.")
+                self.has_embedder = False
+            else:
+                self_weakref = weakref.ref(self)
+                # Patch: ensure query embedding is always single string for Ollama
+                def single_string_embedder(query):
+                    # Accepts either a string or a list, always returns embedding for a single string
+                    if isinstance(query, list):
+                        if len(query) != 1:
+                            raise ValueError("Ollama embedder only supports a single string")
+                        query = query[0]
+                    instance = self_weakref()
+                    assert instance is not None, "RAG instance is no longer available, but the query embedder was called."
+                    return instance.embedder(input=query)
+
+                # Use single string embedder for Ollama, regular embedder for others
+                self.query_embedder = single_string_embedder if self.is_ollama_embedder else self.embedder
+        else:
+            logger.info("Embedder not configured. RAG will operate in LLM-only mode without retrieval.")
 
         # Initialize components
         self.memory = Memory()
-        self.embedder = get_embedder(embedder_type=self.embedder_type)
-
-        self_weakref = weakref.ref(self)
-        # Patch: ensure query embedding is always single string for Ollama
-        def single_string_embedder(query):
-            # Accepts either a string or a list, always returns embedding for a single string
-            if isinstance(query, list):
-                if len(query) != 1:
-                    raise ValueError("Ollama embedder only supports a single string")
-                query = query[0]
-            instance = self_weakref()
-            assert instance is not None, "RAG instance is no longer available, but the query embedder was called."
-            return instance.embedder(input=query)
-
-        # Use single string embedder for Ollama, regular embedder for others
-        self.query_embedder = single_string_embedder if self.is_ollama_embedder else self.embedder
 
         self.initialize_db_manager()
 
@@ -348,6 +362,7 @@ IMPORTANT FORMATTING RULES:
         """
         Prepare the retriever for a repository.
         Will load database from local storage if available.
+        If embedder is not configured, will skip retrieval setup and operate in LLM-only mode.
 
         Args:
             repo_url_or_path: URL or local path to the repository
@@ -360,6 +375,27 @@ IMPORTANT FORMATTING RULES:
         import pickle
         self.initialize_db_manager()
         self.repo_url_or_path = repo_url_or_path
+
+        # If embedder is not configured, skip retrieval setup
+        if not self.has_embedder:
+            logger.info("Embedder not configured. Skipping retrieval setup. RAG will operate in LLM-only mode.")
+            self.retriever = None
+            self.transformed_docs = []
+            # Still load documents for potential use (without embeddings)
+            try:
+                from api.data_pipeline import read_all_documents
+                self.transformed_docs = read_all_documents(
+                    repo_url_or_path,
+                    excluded_dirs=excluded_dirs,
+                    excluded_files=excluded_files,
+                    included_dirs=included_dirs,
+                    included_files=included_files
+                )
+                logger.info(f"Loaded {len(self.transformed_docs)} documents (without embeddings) for LLM-only mode")
+            except Exception as e:
+                logger.warning(f"Could not load documents: {e}. Continuing in LLM-only mode without document context.")
+                self.transformed_docs = []
+            return
 
         try:
             self.transformed_docs = self.db_manager.prepare_database(
@@ -468,14 +504,28 @@ IMPORTANT FORMATTING RULES:
     def call(self, query: str, language: str = "en") -> Tuple[List]:
         """
         Process a query using RAG.
+        If embedder is not configured, will use LLM directly without retrieval.
 
         Args:
             query: The user's query
+            language: Language for the response (default: "en")
 
         Returns:
             Tuple of (RAGAnswer, retrieved_documents)
         """
         try:
+            # If retriever is not available, use generator directly without context
+            if self.retriever is None:
+                logger.info("No retriever available. Using LLM directly without retrieval context.")
+                # Update prompt_kwargs with current conversation history and empty contexts
+                self.generator.prompt_kwargs["contexts"] = None
+                self.generator.prompt_kwargs["conversation_history"] = self.memory()
+                # Use generator directly with query
+                result = self.generator(input_str=query)
+                # Return result with empty retrieved documents
+                return result, []
+
+            # Normal RAG flow with retrieval
             retrieved_documents = self.retriever(query)
 
             # Fill in the documents
