@@ -67,7 +67,7 @@ def count_tokens(text: str, embedder_type: str = None, is_ollama_embedder: bool 
         # Rough approximation: 4 characters per token
         return len(text) // 4
 
-def download_repo(repo_url: str, local_path: str, repo_type: str = None, access_token: str = None) -> str:
+def download_repo(repo_url: str, local_path: str, repo_type: str = None, access_token: str = None, gerrit_user: str = None) -> str:
     """
     Downloads a Git repository (GitHub, GitLab, or Bitbucket) to a specified local path.
 
@@ -116,6 +116,15 @@ def download_repo(repo_url: str, local_path: str, repo_type: str = None, access_
             elif repo_type == "bitbucket":
                 # Format: https://x-token-auth:{token}@bitbucket.org/owner/repo.git
                 clone_url = urlunparse((parsed.scheme, f"x-token-auth:{encoded_token}@{parsed.netloc}", parsed.path, '', '', ''))
+            elif repo_type == "gerrit":
+                # Format: http://username:token@host/path
+                # Gerrit uses HTTP Basic Auth with username and password/token
+                if gerrit_user:
+                    encoded_user = quote(gerrit_user, safe='')
+                    clone_url = urlunparse((parsed.scheme, f"{encoded_user}:{encoded_token}@{parsed.netloc}", parsed.path, '', '', ''))
+                else:
+                    # If no username provided, use token only (some Gerrit setups allow this)
+                    clone_url = urlunparse((parsed.scheme, f"{encoded_token}@{parsed.netloc}", parsed.path, '', '', ''))
 
             logger.info("Using access token for authentication")
 
@@ -746,7 +755,7 @@ class DatabaseManager:
     def prepare_database(self, repo_url_or_path: str, repo_type: str = None, access_token: str = None,
                          embedder_type: str = None, is_ollama_embedder: bool = None,
                          excluded_dirs: List[str] = None, excluded_files: List[str] = None,
-                         included_dirs: List[str] = None, included_files: List[str] = None) -> List[Document]:
+                         included_dirs: List[str] = None, included_files: List[str] = None, gerrit_user: str = None) -> List[Document]:
         """
         Create a new database from the repository.
 
@@ -771,7 +780,7 @@ class DatabaseManager:
             embedder_type = 'ollama' if is_ollama_embedder else None
 
         self.reset_database()
-        self._create_repo(repo_url_or_path, repo_type, access_token)
+        self._create_repo(repo_url_or_path, repo_type, access_token, gerrit_user=gerrit_user)
         return self.prepare_db_index(embedder_type=embedder_type, excluded_dirs=excluded_dirs, excluded_files=excluded_files,
                                    included_dirs=included_dirs, included_files=included_files)
 
@@ -798,7 +807,7 @@ class DatabaseManager:
             repo_name = url_parts[-1].replace(".git", "")
         return repo_name
 
-    def _create_repo(self, repo_url_or_path: str, repo_type: str = None, access_token: str = None) -> None:
+    def _create_repo(self, repo_url_or_path: str, repo_type: str = None, access_token: str = None, gerrit_user: str = None) -> None:
         """
         Download and prepare all paths.
         Paths:
@@ -830,7 +839,7 @@ class DatabaseManager:
                 # Check if the repository directory already exists and is not empty
                 if not (os.path.exists(save_repo_dir) and os.listdir(save_repo_dir)):
                     # Only download if the repository doesn't exist or is empty
-                    download_repo(repo_url_or_path, save_repo_dir, repo_type, access_token)
+                    download_repo(repo_url_or_path, save_repo_dir, repo_type, access_token, gerrit_user=gerrit_user)
                 else:
                     logger.info(f"Repository already exists at {save_repo_dir}. Using existing repository.")
             else:  # local path

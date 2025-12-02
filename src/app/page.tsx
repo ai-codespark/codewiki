@@ -8,7 +8,7 @@ import ThemeToggle from '@/components/theme-toggle';
 import Mermaid from '../components/Mermaid';
 import ConfigurationModal from '@/components/ConfigurationModal';
 import ProcessedProjects from '@/components/ProcessedProjects';
-import { extractUrlPath, extractUrlDomain } from '@/utils/urlDecoder';
+import { extractUrlPath, extractUrlDomain, verifyGerritProject } from '@/utils/urlDecoder';
 import { useProcessedProjects } from '@/hooks/useProcessedProjects';
 
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -250,7 +250,7 @@ export default function Home() {
   // State for configuration modal
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Parse repository input to validate
@@ -259,6 +259,23 @@ export default function Home() {
     if (!parsedRepo) {
       setError('Invalid repository format. Use "owner/repo", GitHub/GitLab/BitBucket URL, or a local folder path like "/path/to/folder" or "C:\\path\\to\\folder".');
       return;
+    }
+
+    // If the type is 'web' (unknown), try to verify if it's a Gerrit project
+    if (parsedRepo.type === 'web') {
+      try {
+        const isGerrit = await verifyGerritProject(repositoryInput);
+        if (isGerrit) {
+          parsedRepo.type = 'gerrit';
+          // Auto-select Gerrit platform if it's detected
+          if (selectedPlatform !== 'gerrit') {
+            setSelectedPlatform('gerrit');
+          }
+        }
+      } catch (error) {
+        console.debug('Error verifying Gerrit project:', error);
+        // Continue with 'web' type if verification fails
+      }
     }
 
     // If valid, open the configuration modal
@@ -342,6 +359,27 @@ export default function Home() {
       setError('Invalid repository format. Use "owner/repo", GitHub/GitLab/BitBucket URL, or a local folder path like "/path/to/folder" or "C:\\path\\to\\folder".');
       setIsSubmitting(false);
       return;
+    }
+
+    // If user explicitly selected Gerrit, verify it's actually a Gerrit project
+    if (selectedPlatform === 'gerrit' && parsedRepo.type !== 'local') {
+      try {
+        const isGerrit = await verifyGerritProject(repositoryInput);
+        if (!isGerrit) {
+          setError('The provided URL does not appear to be a Gerrit project. Please verify the URL or select a different platform.');
+          setIsSubmitting(false);
+          setIsConfigModalOpen(false);
+          return;
+        }
+        // Update the type to gerrit if verification succeeds
+        parsedRepo.type = 'gerrit';
+      } catch (error) {
+        console.error('Error verifying Gerrit project:', error);
+        setError('Failed to verify Gerrit project. Please check the URL and try again.');
+        setIsSubmitting(false);
+        setIsConfigModalOpen(false);
+        return;
+      }
     }
 
     const { owner, repo, type, localPath } = parsedRepo;

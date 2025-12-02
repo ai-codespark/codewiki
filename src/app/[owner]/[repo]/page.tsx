@@ -106,10 +106,16 @@ const addTokensToRequestBody = (
   excludedDirs?: string,
   excludedFiles?: string,
   includedDirs?: string,
-  includedFiles?: string
+  includedFiles?: string,
+  gerritUser?: string
 ): void => {
   if (token !== '') {
     requestBody.token = token;
+  }
+
+  // Add Gerrit user if Gerrit type and user is provided
+  if (repoType === 'gerrit' && gerritUser) {
+    requestBody.gerrit_user = gerritUser;
   }
 
   // Add provider-based model selection parameters
@@ -185,6 +191,7 @@ export default function RepoWikiPage() {
 
   // Extract tokens from search params
   const token = searchParams.get('token') || '';
+  const gerritUser = searchParams.get('gerrit_user') || '';
   const localPath = searchParams.get('local_path') ? decodeURIComponent(searchParams.get('local_path') || '') : undefined;
   const repoUrl = searchParams.get('repo_url') ? decodeURIComponent(searchParams.get('repo_url') || '') : undefined;
   const providerParam = searchParams.get('provider') || '';
@@ -537,7 +544,7 @@ Remember:
         };
 
         // Add tokens if available
-        addTokensToRequestBody(requestBody, currentToken, effectiveRepoInfo.type, selectedProviderState, selectedModelState, isCustomSelectedModelState, customSelectedModelState, language, modelExcludedDirs, modelExcludedFiles, modelIncludedDirs, modelIncludedFiles);
+        addTokensToRequestBody(requestBody, currentToken, effectiveRepoInfo.type, selectedProviderState, selectedModelState, isCustomSelectedModelState, customSelectedModelState, language, modelExcludedDirs, modelExcludedFiles, modelIncludedDirs, modelIncludedFiles, gerritUser);
 
         // Use WebSocket for communication
         let content = '';
@@ -834,7 +841,7 @@ IMPORTANT:
       };
 
       // Add tokens if available
-      addTokensToRequestBody(requestBody, currentToken, effectiveRepoInfo.type, selectedProviderState, selectedModelState, isCustomSelectedModelState, customSelectedModelState, language, modelExcludedDirs, modelExcludedFiles, modelIncludedDirs, modelIncludedFiles);
+      addTokensToRequestBody(requestBody, currentToken, effectiveRepoInfo.type, selectedProviderState, selectedModelState, isCustomSelectedModelState, customSelectedModelState, language, modelExcludedDirs, modelExcludedFiles, modelIncludedDirs, modelIncludedFiles, gerritUser);
 
       // Use WebSocket for communication
       let responseText = '';
