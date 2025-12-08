@@ -17,6 +17,7 @@ from api.openai_client import OpenAIClient
 from api.openrouter_client import OpenRouterClient
 from api.bedrock_client import BedrockClient
 from api.azureai_client import AzureAIClient
+from api.dashscope_client import DashscopeClient
 from api.rag import RAG
 from api.prompts import (
     DEEP_RESEARCH_FIRST_ITERATION_PROMPT,
@@ -64,7 +65,7 @@ class ChatCompletionRequest(BaseModel):
     gerrit_user: Optional[str] = Field(None, description="Gerrit username for Gerrit repository authentication")
 
     # model parameters
-    provider: str = Field("google", description="Model provider (google, openai, openrouter, ollama, bedrock, azure)")
+    provider: str = Field("google", description="Model provider (google, openai, openrouter, ollama, bedrock, azure, dashscope)")
     model: Optional[str] = Field(None, description="Model name for the specified provider")
 
     language: Optional[str] = Field("en", description="Language for content generation (e.g., 'en', 'ja', 'zh', 'es', 'kr', 'vi')")
@@ -717,16 +718,43 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                             except Exception as e_fallback:
                                 logger.error(f"Error with Azure AI API fallback: {str(e_fallback)}")
                                 yield f"\nError with Azure AI API fallback: {str(e_fallback)}\n\nPlease check that you have set the AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, and AZURE_OPENAI_VERSION environment variables with valid values."
+                        elif request.provider == "dashscope":
+                            try:
+                                # Create new api_kwargs with the simplified prompt
+                                fallback_api_kwargs = model.convert_inputs_to_api_kwargs(
+                                    input=simplified_prompt,
+                                    model_kwargs=model_kwargs,
+                                    model_type=ModelType.LLM
+                                )
+
+                                # Get the response using the simplified prompt
+                                logger.info("Making fallback Dashscope API call")
+                                fallback_response = await model.acall(api_kwargs=fallback_api_kwargs, model_type=ModelType.LLM)
+                                # Handle streaming response from Dashscope - it's already an async
+                                # generator of text chunks
+                                async for text in fallback_response:
+                                    if text:
+                                        yield text
+                            except Exception as e_fallback:
+                                logger.error(
+                                    f"Error with Dashscope API fallback: {str(e_fallback)}"
+                                )
+                                error_msg = (
+                                    f"\nError with Dashscope API fallback: {str(e_fallback)}\n\n"
+                                    "Please check that you have set the DASHSCOPE_API_KEY (and optionally "
+                                    "DASHSCOPE_WORKSPACE_ID) environment variables with valid values."
+                                )
+                                yield error_msg
                         else:
-                            # Initialize Google Generative AI model
+                            # Google Generative AI fallback (default provider)
                             model_config = get_model_config(request.provider, request.model)
                             fallback_model = genai.GenerativeModel(
-                                model_name=model_config["model"],
+                                model_name=model_config["model_kwargs"]["model"],
                                 generation_config={
                                     "temperature": model_config["model_kwargs"].get("temperature", 0.7),
                                     "top_p": model_config["model_kwargs"].get("top_p", 0.8),
-                                    "top_k": model_config["model_kwargs"].get("top_k", 40)
-                                }
+                                    "top_k": model_config["model_kwargs"].get("top_k", 40),
+                                },
                             )
 
                             # Get streaming response using simplified prompt
