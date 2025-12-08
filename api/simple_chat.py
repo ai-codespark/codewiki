@@ -250,10 +250,26 @@ async def chat_completions_stream(request: ChatCompletionRequest):
 
         # Get repository information
         repo_url = request.repo_url
-        repo_name = repo_url.split("/")[-1] if "/" in repo_url else repo_url
-
-        # Determine repository type
         repo_type = request.type
+
+        # Extract repo_name based on repository type
+        if repo_type == "gerrit":
+            # Gerrit URL format: http://host:port/a/project-name or http://host:port/project-name
+            url_parts = [p for p in repo_url.rstrip('/').split('/') if p]
+            if url_parts and url_parts[-1] == 'a' and len(url_parts) > 1:
+                # Handle case where URL ends with /a/
+                repo_name = url_parts[-2] if len(url_parts) > 1 else "gerrit-project"
+            elif url_parts and url_parts[0] == 'a' and len(url_parts) > 1:
+                # Handle /a/project-name format
+                repo_name = url_parts[1]
+            elif url_parts:
+                repo_name = url_parts[-1]
+            else:
+                repo_name = "gerrit-project"
+            repo_name = repo_name.replace(".git", "")
+        else:
+            repo_name = repo_url.split("/")[-1] if "/" in repo_url else repo_url
+            repo_name = repo_name.replace(".git", "")
 
         # Get language information
         language_code = request.language or configs["lang_config"]["default"]
@@ -303,7 +319,9 @@ async def chat_completions_stream(request: ChatCompletionRequest):
         file_content = ""
         if request.filePath:
             try:
-                file_content = get_file_content(request.repo_url, request.filePath, request.type, request.token)
+                # Pass gerrit_user for Gerrit repositories
+                gerrit_user = request.gerrit_user if request.type == "gerrit" else None
+                file_content = get_file_content(request.repo_url, request.filePath, request.type, request.token, gerrit_user=gerrit_user)
                 logger.info(f"Successfully retrieved content for file: {request.filePath}")
             except Exception as e:
                 logger.error(f"Error retrieving file content: {str(e)}")

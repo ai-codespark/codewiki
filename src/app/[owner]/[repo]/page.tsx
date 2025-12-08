@@ -179,6 +179,61 @@ const createBitbucketHeaders = (bitbucketToken: string): HeadersInit => {
   return headers;
 };
 
+const createGerritHeaders = (gerritToken: string, gerritUser?: string): HeadersInit => {
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+
+  if (gerritToken && gerritUser) {
+    // HTTP Basic Auth for Gerrit
+    const authString = `${gerritUser}:${gerritToken}`;
+    const authBase64 = btoa(authString);
+    headers['Authorization'] = `Basic ${authBase64}`;
+  } else if (gerritToken) {
+    // Some Gerrit setups allow token-only auth
+    const authBase64 = btoa(gerritToken);
+    headers['Authorization'] = `Basic ${authBase64}`;
+  }
+
+  return headers;
+};
+
+// Helper function to extract Gerrit project name from URL
+const extractGerritProjectName = (repoUrl: string): string => {
+  try {
+    const url = new URL(repoUrl);
+    const pathParts = url.pathname.split('/').filter(p => p);
+
+    // Gerrit URLs may have /a/ prefix for authenticated access
+    if (pathParts[0] === 'a' && pathParts.length > 1) {
+      return pathParts[1].replace('.git', '');
+    } else if (pathParts.length > 0) {
+      return pathParts[pathParts.length - 1].replace('.git', '');
+    }
+    return '';
+  } catch {
+    return '';
+  }
+};
+
+// Helper function to get Gerrit base URL
+const getGerritBaseUrl = (repoUrl: string): string => {
+  try {
+    const url = new URL(repoUrl);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return '';
+  }
+};
+
+// Helper function to strip Gerrit XSSI prefix
+const stripGerritXssiPrefix = (text: string): string => {
+  if (text.startsWith(")]}'")) {
+    return text.substring(4);
+  }
+  return text;
+};
+
 
 export default function RepoWikiPage() {
   // Get route parameters and search params
@@ -315,6 +370,14 @@ export default function RepoWikiPage() {
       } else if (hostname === 'bitbucket.org' || hostname.includes('bitbucket')) {
         // Bitbucket URL format: https://bitbucket.org/owner/repo/src/branch/path
         return `${repoUrl}/src/${defaultBranch}/${filePath}`;
+      } else if (effectiveRepoInfo.type === 'gerrit') {
+        // Gerrit URL format: http://host:port/plugins/gitiles/project-name/+/refs/heads/branch/path
+        // Or: http://host:port/c/project-name/+/refs/heads/branch/path
+        const projectName = extractGerritProjectName(repoUrl);
+        if (projectName) {
+          // Try Gitiles format first (most common)
+          return `${repoUrl.replace(/\/a\/.*$/, '')}/plugins/gitiles/${projectName}/+/refs/heads/${defaultBranch}/${filePath}`;
+        }
       }
     } catch (error) {
       console.warn('Error generating file URL:', error);
@@ -1423,6 +1486,110 @@ IMPORTANT:
             }
         } catch (err) {
           console.error("Error during GitLab repository tree retrieval:", err);
+          throw err;
+        }
+      }
+      else if (effectiveRepoInfo.type === 'gerrit') {
+        // Gerrit REST API approach
+        const gerritBaseUrl = getGerritBaseUrl(effectiveRepoInfo.repoUrl ?? '');
+        const projectName = extractGerritProjectName(effectiveRepoInfo.repoUrl ?? '');
+        const gerritUser = searchParams.get('gerrit_user') || undefined;
+
+        if (!gerritBaseUrl || !projectName) {
+          throw new Error('Invalid Gerrit repository URL');
+        }
+
+        // URL-encode the project name for API calls
+        const encodedProjectName = encodeURIComponent(projectName);
+        const headers = createGerritHeaders(currentToken || '', gerritUser);
+
+        let defaultBranchLocal = 'master'; // fallback
+        let fileTreeData = '';
+        let readmeContent = '';
+
+        try {
+          // Step 1: Get HEAD to determine default branch
+          // GET /projects/{project-name}/HEAD
+          const headUrl = `${gerritBaseUrl}/a/projects/${encodedProjectName}/HEAD`;
+          console.log(`Fetching HEAD from Gerrit: ${headUrl}`);
+
+          const headResponse = await fetch(headUrl, { headers });
+
+          if (headResponse.ok) {
+            const headText = await headResponse.text();
+            const cleanedText = stripGerritXssiPrefix(headText);
+            const headData = JSON.parse(cleanedText);
+
+            // HEAD response format: "refs/heads/master" -> extract "master"
+            const ref = headData.ref || '';
+            if (ref.startsWith('refs/heads/')) {
+              defaultBranchLocal = ref.substring(11); // Remove 'refs/heads/' prefix
+            }
+            console.log(`Found Gerrit default branch: ${defaultBranchLocal}`);
+            setDefaultBranch(defaultBranchLocal);
+          } else {
+            console.warn(`Could not fetch HEAD, using 'master' as default branch. Status: ${headResponse.status}`);
+          }
+        } catch (err) {
+          console.warn('Error fetching HEAD:', err);
+        }
+
+        // Step 2: Use backend API to get file tree (since Gerrit doesn't have a direct file tree endpoint)
+        // We'll use the same approach as local repos - call backend API
+        try {
+          const repoUrl = effectiveRepoInfo.repoUrl;
+          if (repoUrl) {
+            const response = await fetch('/api/gerrit/structure', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                repo_url: repoUrl,
+                gerrit_user: gerritUser,
+                token: currentToken,
+              }),
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              fileTreeData = data.file_tree || '';
+              readmeContent = data.readme || '';
+              console.log('Successfully fetched Gerrit repository structure from backend');
+            } else {
+              const errorData = await response.text();
+              throw new Error(`Backend API error (${response.status}): ${errorData}`);
+            }
+          } else {
+            throw new Error('Repository URL is required');
+          }
+        } catch (err) {
+          console.error('Error fetching repository structure from backend:', err);
+          // Fallback: try to get README directly via Gerrit API
+          try {
+            const encodedBranch = encodeURIComponent(defaultBranchLocal);
+            const readmeUrl = `${gerritBaseUrl}/a/projects/${encodedProjectName}/branches/${encodedBranch}/files/README.md/content`;
+            const readmeResponse = await fetch(readmeUrl, { headers });
+
+            if (readmeResponse.ok) {
+              const readmeText = await readmeResponse.text();
+              const cleanedReadmeText = stripGerritXssiPrefix(readmeText);
+              const readmeData = JSON.parse(cleanedReadmeText);
+
+              // Gerrit returns base64-encoded content
+              if (typeof readmeData === 'string') {
+                readmeContent = atob(readmeData);
+              } else if (readmeData.content) {
+                readmeContent = atob(readmeData.content);
+              }
+              console.log('Successfully fetched Gerrit README.md');
+            }
+          } catch (readmeErr) {
+            console.warn('Could not fetch Gerrit README.md:', readmeErr);
+          }
+
+          // If backend API fails, we still need file tree data
+          // For now, throw the error - the backend API should handle this
           throw err;
         }
       }

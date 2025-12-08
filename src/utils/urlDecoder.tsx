@@ -38,11 +38,13 @@ export async function verifyGerritProject(input: string): Promise<boolean> {
         });
 
         if (!response.ok) {
-            console.debug(`Gerrit verification API returned status ${response.status}`);
+            const errorData = await response.json().catch(() => ({}));
+            console.debug(`Gerrit verification API returned status ${response.status}:`, errorData);
             return false;
         }
 
         const data = await response.json();
+        console.debug('Gerrit verification response:', data);
         return data.isGerrit === true;
     } catch (error) {
         // Any error means verification failed

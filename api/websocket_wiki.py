@@ -105,17 +105,19 @@ async def handle_websocket_chat(websocket: WebSocket):
                 await websocket.close()
                 return
             else:
-                logger.error(f"ValueError preparing retriever: {str(e)}")
-                await websocket.send_text(f"Error preparing retriever: {str(e)}")
+                error_type = type(e).__name__
+                logger.error(f"ValueError preparing retriever: {error_type}: {str(e)}", exc_info=True)
+                await websocket.send_text(f"Error preparing repository: {str(e)}\n\nThis may be due to authentication issues or repository access problems. Please check your credentials and repository URL.")
                 await websocket.close()
                 return
-        except Exception as e:
-            logger.error(f"Error preparing retriever: {str(e)}")
+        except Exception as e_prep:
+            error_type = type(e_prep).__name__
+            logger.error(f"Exception preparing retriever: {error_type}: {str(e_prep)}", exc_info=True)
             # Check for specific embedding-related errors
-            if "All embeddings should be of the same size" in str(e):
+            if "All embeddings should be of the same size" in str(e_prep):
                 await websocket.send_text("Error: Inconsistent embedding sizes detected. Some documents may have failed to embed properly. Please try again.")
             else:
-                await websocket.send_text(f"Error preparing retriever: {str(e)}")
+                await websocket.send_text(f"Error preparing repository: {str(e_prep)}\n\nPlease check your repository URL, authentication credentials, and network connection.")
             await websocket.close()
             return
 
@@ -245,10 +247,26 @@ async def handle_websocket_chat(websocket: WebSocket):
 
         # Get repository information
         repo_url = request.repo_url
-        repo_name = repo_url.split("/")[-1] if "/" in repo_url else repo_url
-
-        # Determine repository type
         repo_type = request.type
+
+        # Extract repo_name based on repository type
+        if repo_type == "gerrit":
+            # Gerrit URL format: http://host:port/a/project-name or http://host:port/project-name
+            url_parts = [p for p in repo_url.rstrip('/').split('/') if p]
+            if url_parts and url_parts[-1] == 'a' and len(url_parts) > 1:
+                # Handle case where URL ends with /a/
+                repo_name = url_parts[-2] if len(url_parts) > 1 else "gerrit-project"
+            elif url_parts and url_parts[0] == 'a' and len(url_parts) > 1:
+                # Handle /a/project-name format
+                repo_name = url_parts[1]
+            elif url_parts:
+                repo_name = url_parts[-1]
+            else:
+                repo_name = "gerrit-project"
+            repo_name = repo_name.replace(".git", "")
+        else:
+            repo_name = repo_url.split("/")[-1] if "/" in repo_url else repo_url
+            repo_name = repo_name.replace(".git", "")
 
         # Get language information
         language_code = request.language or configs["lang_config"]["default"]
@@ -403,7 +421,9 @@ This file contains...
         file_content = ""
         if request.filePath:
             try:
-                file_content = get_file_content(request.repo_url, request.filePath, request.type, request.token)
+                # Pass gerrit_user for Gerrit repositories
+                gerrit_user = request.gerrit_user if repo_type == "gerrit" else None
+                file_content = get_file_content(request.repo_url, request.filePath, request.type, request.token, gerrit_user=gerrit_user)
                 logger.info(f"Successfully retrieved content for file: {request.filePath}")
             except Exception as e:
                 logger.error(f"Error retrieving file content: {str(e)}")
@@ -541,11 +561,25 @@ This file contains...
                 model_type=ModelType.LLM
             )
         elif request.provider == "litellm":
-            logger.info(f"Using LiteLLM with model: {request.model}")
+            logger.info(f"Using LiteLLM with model: {request.model}, repo_type: {request.type}")
 
             # Initialize LiteLLM client
             from api.litellm_client import LiteLLMClient
-            model = LiteLLMClient()
+            from api.config import LITELLM_API_KEY, LITELLM_BASE_URL
+
+            # Log environment variable status (without exposing values)
+            logger.info(f"LiteLLM config check: API_KEY present={bool(LITELLM_API_KEY)}, BASE_URL present={bool(LITELLM_BASE_URL)}")
+
+            try:
+                model = LiteLLMClient()
+                logger.info(f"LiteLLM client initialized successfully, base_url: {model.base_url}")
+            except Exception as e_init:
+                error_type = type(e_init).__name__
+                logger.error(f"Failed to initialize LiteLLM client: {error_type}: {str(e_init)}", exc_info=True)
+                error_msg = f"\nError initializing LiteLLM client: {str(e_init)}\n\nPlease check that you have set the LITELLM_API_KEY and LITELLM_BASE_URL environment variables with valid values."
+                await websocket.send_text(error_msg)
+                await websocket.close()
+                return
             model_kwargs = {
                 "model": request.model,
                 "stream": True,
@@ -560,6 +594,17 @@ This file contains...
                 model_kwargs=model_kwargs,
                 model_type=ModelType.LLM
             )
+
+            # Log the request details for debugging
+            logger.info(f"LiteLLM request details: model={api_kwargs.get('model')}, stream={api_kwargs.get('stream')}, temperature={api_kwargs.get('temperature')}, top_p={api_kwargs.get('top_p')}")
+            messages = api_kwargs.get("messages", [])
+            if messages:
+                total_chars = sum(len(str(msg.get("content", ""))) for msg in messages)
+                logger.info(f"LiteLLM request: {len(messages)} messages, total content length: ~{total_chars} characters")
+                # Log first message preview (first 200 chars)
+                if len(messages) > 0:
+                    first_msg_preview = str(messages[0].get("content", ""))[:200]
+                    logger.debug(f"First message preview: {first_msg_preview}...")
         elif request.provider == "google":
             # Initialize Google Generative AI model
             generation_config = {
@@ -692,8 +737,38 @@ This file contains...
                     # Explicitly close the WebSocket connection after the response is complete
                     await websocket.close()
                 except Exception as e_litellm:
-                    logger.error(f"Error with LiteLLM API: {str(e_litellm)}")
-                    error_msg = f"\nError with LiteLLM API: {str(e_litellm)}\n\nPlease check that you have set the LITELLM_API_KEY and LITELLM_BASE_URL environment variables with valid values."
+                    error_type = type(e_litellm).__name__
+                    error_details = str(e_litellm)
+                    logger.error(f"Error with LiteLLM API: {error_type}: {error_details}", exc_info=True)
+
+                    # Try to extract status code from the exception
+                    status_code = None
+                    if hasattr(e_litellm, 'status_code'):
+                        status_code = e_litellm.status_code
+                    elif hasattr(e_litellm, 'response') and hasattr(e_litellm.response, 'status_code'):
+                        status_code = e_litellm.response.status_code
+
+                    # Check for specific error types
+                    error_msg = ""
+                    if "LITELLM_API_KEY" in error_details or "LITELLM_BASE_URL" in error_details or "must be set" in error_details:
+                        error_msg = f"\nError with LiteLLM API: {error_details}\n\nPlease check that you have set the LITELLM_API_KEY and LITELLM_BASE_URL environment variables with valid values."
+                    elif status_code == 402:
+                        error_msg = f"\nError with LiteLLM API: Payment Required (402)\n\nThe LiteLLM service requires payment or account credits. Please check your account balance and billing information at your LiteLLM provider.\n\nError details: {error_details}"
+                    elif status_code == 401:
+                        error_msg = f"\nError with LiteLLM API: Unauthorized (401)\n\nPlease check that your LITELLM_API_KEY is valid and has the correct permissions.\n\nError details: {error_details}"
+                    elif status_code == 429:
+                        error_msg = f"\nError with LiteLLM API: Rate Limit Exceeded (429)\n\nToo many requests. Please wait a moment and try again.\n\nError details: {error_details}"
+                    elif status_code is not None:
+                        error_msg = f"\nError with LiteLLM API: HTTP {status_code}\n\nError details: {error_details}"
+                    elif "402" in error_details or "Payment Required" in error_details or "payment" in error_details.lower():
+                        error_msg = f"\nError with LiteLLM API: Payment Required\n\nThe LiteLLM service requires payment or account credits. Please check your account balance and billing information at your LiteLLM provider.\n\nError details: {error_details}"
+                    elif "blocked" in error_details.lower():
+                        # Generic blocked error - could be payment, rate limit, or other issues
+                        # Based on the log, this is likely a 402 Payment Required
+                        error_msg = f"\nError with LiteLLM API: Request Blocked\n\nYour request was blocked by the LiteLLM service. This is likely due to:\n- Insufficient account credits or payment required (HTTP 402)\n- Rate limiting\n- Account restrictions\n\nPlease check your LiteLLM account status and billing information.\n\nError details: {error_details}"
+                    else:
+                        error_msg = f"\nError with LiteLLM API: {error_details}\n\nPlease check your LiteLLM configuration and ensure the API is accessible."
+
                     await websocket.send_text(error_msg)
                     # Close the WebSocket connection after sending the error message
                     await websocket.close()

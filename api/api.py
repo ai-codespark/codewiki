@@ -404,6 +404,114 @@ async def get_local_repo_structure(path: str = Query(None, description="Path to 
             content={"error": f"Error processing local repository: {str(e)}"}
         )
 
+class GerritStructureRequest(BaseModel):
+    repo_url: str
+    gerrit_user: Optional[str] = None
+    token: Optional[str] = None
+
+@app.post("/api/gerrit/structure")
+async def get_gerrit_repo_structure(request: GerritStructureRequest):
+    """Return the file tree and README content for a Gerrit repository."""
+    try:
+        from api.data_pipeline import DatabaseManager, extract_gerrit_project_name
+
+        repo_url = request.repo_url
+        gerrit_user = request.gerrit_user
+        token = request.token
+
+        if not repo_url:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Repository URL is required"}
+            )
+
+        logger.info(f"Processing Gerrit repository: {repo_url}")
+
+        # Extract project name and determine local path
+        try:
+            _, project_name = extract_gerrit_project_name(repo_url)
+            # Decode the project name for use as directory name
+            from urllib.parse import unquote
+            decoded_project_name = unquote(project_name)
+        except Exception as e:
+            logger.error(f"Failed to extract Gerrit project name: {str(e)}")
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Invalid Gerrit repository URL: {str(e)}"}
+            )
+
+        # Use DatabaseManager to clone the repository (without creating database index)
+        # We only need the file tree, not the embeddings/database
+        db_manager = DatabaseManager()
+        repo_path = None
+
+        try:
+            # Just clone the repo without creating the database index
+            # This avoids requiring embedder configuration
+            db_manager._create_repo(
+                repo_url_or_path=repo_url,
+                repo_type="gerrit",
+                access_token=token,
+                gerrit_user=gerrit_user
+            )
+
+            # Get the local repository path
+            # repo_paths is a dictionary with keys: "save_repo_dir" and "save_db_file"
+            if db_manager.repo_paths and isinstance(db_manager.repo_paths, dict):
+                repo_path = db_manager.repo_paths.get("save_repo_dir")
+            else:
+                repo_path = None
+
+            if not repo_path or not os.path.isdir(repo_path):
+                return JSONResponse(
+                    status_code=404,
+                    content={"error": f"Repository not found at: {repo_path}", "repo_paths": str(db_manager.repo_paths)}
+                )
+        except Exception as e:
+            logger.error(f"Error cloning Gerrit repository: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"error": f"Error cloning repository: {str(e)}"}
+            )
+
+        # Now get the file tree and README (similar to local_repo/structure)
+        try:
+            file_tree_lines = []
+            readme_content = ""
+
+            for root, dirs, files in os.walk(repo_path):
+                # Exclude hidden dirs/files and virtual envs
+                dirs[:] = [d for d in dirs if not d.startswith('.') and d != '__pycache__' and d != 'node_modules' and d != '.venv']
+                for file in files:
+                    if file.startswith('.') or file == '__init__.py' or file == '.DS_Store':
+                        continue
+                    rel_dir = os.path.relpath(root, repo_path)
+                    rel_file = os.path.join(rel_dir, file) if rel_dir != '.' else file
+                    file_tree_lines.append(rel_file)
+                    # Find README.md (case-insensitive)
+                    if file.lower() == 'readme.md' and not readme_content:
+                        try:
+                            with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
+                                readme_content = f.read()
+                        except Exception as e:
+                            logger.warning(f"Could not read README.md: {str(e)}")
+                            readme_content = ""
+
+            file_tree_str = '\n'.join(sorted(file_tree_lines))
+            return {"file_tree": file_tree_str, "readme": readme_content}
+        except Exception as e:
+            logger.error(f"Error processing Gerrit repository structure: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"error": f"Error processing repository structure: {str(e)}"}
+            )
+    except Exception as e:
+        logger.error(f"Error in get_gerrit_repo_structure: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Internal server error: {str(e)}"}
+        )
+
 def generate_markdown_export(repo_url: str, pages: List[WikiPage]) -> str:
     """
     Generate Markdown export of wiki pages.

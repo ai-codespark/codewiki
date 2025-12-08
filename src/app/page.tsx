@@ -361,24 +361,25 @@ export default function Home() {
       return;
     }
 
-    // If user explicitly selected Gerrit, verify it's actually a Gerrit project
+    // If user explicitly selected Gerrit, try to verify it's actually a Gerrit project
+    // But allow proceeding if verification fails (server might be unreachable or require auth)
     if (selectedPlatform === 'gerrit' && parsedRepo.type !== 'local') {
       try {
         const isGerrit = await verifyGerritProject(repositoryInput);
-        if (!isGerrit) {
-          setError('The provided URL does not appear to be a Gerrit project. Please verify the URL or select a different platform.');
-          setIsSubmitting(false);
-          setIsConfigModalOpen(false);
-          return;
+        if (isGerrit) {
+          // Verification succeeded, update the type to gerrit
+          parsedRepo.type = 'gerrit';
+        } else {
+          // Verification failed, but user explicitly selected Gerrit
+          // Allow proceeding - the server might be unreachable from Next.js server
+          // or require authentication. The backend will handle the actual connection.
+          console.warn('Gerrit verification failed, but proceeding since user explicitly selected Gerrit platform');
+          parsedRepo.type = 'gerrit';
         }
-        // Update the type to gerrit if verification succeeds
-        parsedRepo.type = 'gerrit';
       } catch (error) {
-        console.error('Error verifying Gerrit project:', error);
-        setError('Failed to verify Gerrit project. Please check the URL and try again.');
-        setIsSubmitting(false);
-        setIsConfigModalOpen(false);
-        return;
+        // Network error or other issue - allow proceeding since user selected Gerrit
+        console.warn('Error verifying Gerrit project, but proceeding since user explicitly selected Gerrit:', error);
+        parsedRepo.type = 'gerrit';
       }
     }
 

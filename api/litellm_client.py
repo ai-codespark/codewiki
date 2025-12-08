@@ -121,7 +121,13 @@ class LiteLLMClient(ModelClient):
             raise ValueError(
                 f"Environment variable {self._env_api_key_name} must be set"
             )
-        return OpenAI(api_key=api_key, base_url=self.base_url)
+        # Initialize with custom timeout
+        return OpenAI(
+            api_key=api_key,
+            base_url=self.base_url,
+            timeout=60.0,  # 60 second timeout
+            max_retries=2  # Reduce retries to fail faster on payment errors
+        )
 
     def init_async_client(self):
         """Initialize the asynchronous LiteLLM client."""
@@ -130,7 +136,14 @@ class LiteLLMClient(ModelClient):
             raise ValueError(
                 f"Environment variable {self._env_api_key_name} must be set"
             )
-        return AsyncOpenAI(api_key=api_key, base_url=self.base_url)
+        # Initialize with custom timeout and headers if needed
+        # Some LiteLLM providers may require specific headers or have different timeout requirements
+        return AsyncOpenAI(
+            api_key=api_key,
+            base_url=self.base_url,
+            timeout=60.0,  # 60 second timeout
+            max_retries=2  # Reduce retries to fail faster on payment errors
+        )
 
     def parse_chat_completion(
         self,
@@ -385,21 +398,74 @@ class LiteLLMClient(ModelClient):
             # Check if streaming is requested
             stream = api_kwargs.get("stream", False)
 
-            if stream:
-                # Handle streaming response
-                stream_response = await self.async_client.chat.completions.create(**api_kwargs)
+            # Log the request details (without sensitive data)
+            log.info(f"LiteLLM LLM API call: model={api_kwargs.get('model')}, stream={stream}, base_url={self.base_url}")
+            log.debug(f"LiteLLM LLM API kwargs keys: {list(api_kwargs.keys())}")
+            # Log message count and approximate size
+            messages = api_kwargs.get("messages", [])
+            if messages:
+                total_chars = sum(len(str(msg.get("content", ""))) for msg in messages)
+                log.info(f"LiteLLM request: {len(messages)} messages, ~{total_chars} characters")
 
-                async def stream_generator():
-                    async for chunk in stream_response:
-                        parsed_content = parse_stream_response(chunk)
-                        if parsed_content:
-                            yield parsed_content
+            try:
+                # Try using OpenAI SDK first
+                if stream:
+                    # Handle streaming response
+                    stream_response = await self.async_client.chat.completions.create(**api_kwargs)
 
-                return stream_generator()
-            else:
-                # Non-streaming response
-                completion = await self.async_client.chat.completions.create(**api_kwargs)
-                return self.parse_chat_completion(completion)
+                    async def stream_generator():
+                        async for chunk in stream_response:
+                            parsed_content = parse_stream_response(chunk)
+                            if parsed_content:
+                                yield parsed_content
+
+                    return stream_generator()
+                else:
+                    # Non-streaming response
+                    completion = await self.async_client.chat.completions.create(**api_kwargs)
+                    return self.parse_chat_completion(completion)
+            except Exception as e:
+                # Check for APIStatusError with 402 status code
+                from openai import APIStatusError
+                if isinstance(e, APIStatusError):
+                    status_code = getattr(e, 'status_code', None)
+                    if status_code == 402:
+                        log.warning(f"LiteLLM API returned 402 Payment Required with OpenAI SDK (streaming={stream}). Trying non-streaming mode as fallback...")
+                        # Try non-streaming mode as fallback (curl/postman might not use streaming)
+                        if stream:
+                            try:
+                                api_kwargs_non_stream = api_kwargs.copy()
+                                api_kwargs_non_stream["stream"] = False
+                                log.info("Retrying LiteLLM request with non-streaming mode...")
+                                completion = await self.async_client.chat.completions.create(**api_kwargs_non_stream)
+                                log.info("LiteLLM non-streaming request succeeded, converting to stream format")
+                                # Convert non-streaming response to streaming format
+                                content = self.parse_chat_completion(completion)
+                                async def converted_stream_generator():
+                                    # Yield the content as if it were streamed
+                                    if hasattr(content, 'data') and content.data:
+                                        # Simulate streaming by yielding chunks
+                                        text = str(content.data)
+                                        chunk_size = 50  # Yield in small chunks
+                                        for i in range(0, len(text), chunk_size):
+                                            yield text[i:i+chunk_size]
+                                    else:
+                                        yield str(content.data) if hasattr(content, 'data') else str(content)
+                                return converted_stream_generator()
+                            except Exception as non_stream_error:
+                                log.error(f"LiteLLM non-streaming fallback also failed: {str(non_stream_error)}")
+                                # Continue to raise original error
+
+                        # If fallback also fails, raise original error with better message
+                        log.error(f"LiteLLM API returned 402 Payment Required. Request size: ~{total_chars if messages else 0} characters, model: {api_kwargs.get('model')}")
+                        log.error("Both OpenAI SDK and direct HTTP requests failed with 402. This suggests an account/billing issue.")
+                        raise APIStatusError(
+                            message=f"Payment Required (402): Account credits may be insufficient. Request size: ~{total_chars if messages else 0} chars. Please check your LiteLLM account balance.",
+                            response=e.response,
+                            body=e.body
+                        ) from e
+                # Re-raise other errors
+                raise
         elif model_type == ModelType.EMBEDDER:
             # Use OpenAI-compatible embeddings endpoint
             # Return raw response like OpenAIClient - the embedder framework will call parse_embedding_response

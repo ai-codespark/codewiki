@@ -9,6 +9,7 @@ import logging
 import base64
 import glob
 import pickle
+from typing import Tuple
 from adalflow.utils import get_adalflow_default_root_path
 from adalflow.core.db import LocalDB
 from api.config import configs, DEFAULT_EXCLUDED_DIRS, DEFAULT_EXCLUDED_FILES
@@ -717,15 +718,192 @@ def get_bitbucket_file_content(repo_url: str, file_path: str, access_token: str 
         raise ValueError(f"Failed to get file content: {str(e)}")
 
 
-def get_file_content(repo_url: str, file_path: str, repo_type: str = None, access_token: str = None) -> str:
+def extract_gerrit_project_name(repo_url: str) -> Tuple[str, str]:
     """
-    Retrieves the content of a file from a Git repository (GitHub or GitLab).
+    Extract Gerrit project name and base URL from a Gerrit repository URL.
+
+    Gerrit URLs can be in formats:
+    - http://host:port/a/project-name (authenticated)
+    - http://host:port/project-name (unauthenticated)
+
+    Args:
+        repo_url (str): The Gerrit repository URL
+
+    Returns:
+        tuple[str, str]: (base_url, project_name) where base_url is the Gerrit server base URL
+                        and project_name is the project name (URL-encoded if needed)
+
+    Raises:
+        ValueError: If the URL is not a valid Gerrit URL
+    """
+    try:
+        parsed_url = urlparse(repo_url)
+        if not parsed_url.scheme or not parsed_url.netloc:
+            raise ValueError("Not a valid Gerrit repository URL")
+
+        # Construct base URL (netloc already includes port if present)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+
+        # Extract project name from path
+        # Gerrit URLs may have /a/ prefix for authenticated access
+        path_parts = [p for p in parsed_url.path.strip('/').split('/') if p]
+
+        if not path_parts:
+            raise ValueError("Invalid Gerrit URL format - no project name found")
+
+        # Remove /a/ prefix if present
+        if path_parts[0] == 'a' and len(path_parts) > 1:
+            project_name = path_parts[1]
+        else:
+            project_name = path_parts[0]
+
+        # Remove .git suffix if present
+        project_name = project_name.replace('.git', '')
+
+        # URL-encode the project name for API calls (Gerrit uses URL encoding)
+        encoded_project_name = quote(project_name, safe='')
+
+        return base_url, encoded_project_name
+    except Exception as e:
+        raise ValueError(f"Failed to extract Gerrit project name: {str(e)}")
+
+
+def get_gerrit_file_content(repo_url: str, file_path: str, access_token: str = None, gerrit_user: str = None) -> str:
+    """
+    Retrieves the content of a file from a Gerrit repository using the Gerrit REST API.
+
+    According to Gerrit REST API documentation:
+    - GET /projects/{project-name}/branches/{branch-id}/files/{file-path}/content
+
+    Args:
+        repo_url (str): The Gerrit repository URL (e.g., "http://host:port/a/project-name")
+        file_path (str): The path to the file within the repository (e.g., "src/main.py")
+        access_token (str, optional): Gerrit access token (HTTP password)
+        gerrit_user (str, optional): Gerrit username for HTTP Basic Auth
+
+    Returns:
+        str: The content of the file as a string
+
+    Raises:
+        ValueError: If the file cannot be fetched or if the URL is not valid
+    """
+    try:
+        base_url, encoded_project_name = extract_gerrit_project_name(repo_url)
+
+        # Try to get the default branch (HEAD) from the project
+        # GET /projects/{project-name}/HEAD returns the current branch
+        default_branch = None
+        try:
+            head_url = f"{base_url}/a/projects/{encoded_project_name}/HEAD"
+            headers = {}
+            if access_token and gerrit_user:
+                # HTTP Basic Auth
+                import base64
+                auth_string = f"{gerrit_user}:{access_token}"
+                auth_bytes = auth_string.encode('ascii')
+                auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+                headers["Authorization"] = f"Basic {auth_b64}"
+            elif access_token:
+                # Some Gerrit setups allow token-only auth
+                import base64
+                auth_bytes = access_token.encode('ascii')
+                auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+                headers["Authorization"] = f"Basic {auth_b64}"
+
+            logger.info(f"Fetching HEAD from Gerrit: {head_url}")
+            head_response = requests.get(head_url, headers=headers)
+
+            # Gerrit responses have XSSI protection prefix )]}'
+            if head_response.status_code == 200:
+                response_text = head_response.text
+                # Strip XSSI prefix if present
+                if response_text.startswith(")]}'"):
+                    response_text = response_text[4:]
+                head_data = json.loads(response_text)
+                # HEAD response format: "refs/heads/master" -> extract "master"
+                ref = head_data.get('ref', '')
+                if ref.startswith('refs/heads/'):
+                    default_branch = ref[11:]  # Remove 'refs/heads/' prefix
+                else:
+                    default_branch = 'master'  # Fallback
+                logger.info(f"Found default branch: {default_branch}")
+            else:
+                logger.warning(f"Could not fetch HEAD, using 'master' as default branch. Status: {head_response.status_code}")
+                default_branch = 'master'
+        except Exception as e:
+            logger.warning(f"Error fetching HEAD: {e}, using 'master' as default branch")
+            default_branch = 'master'
+
+        # URL-encode the branch name and file path
+        encoded_branch = quote(default_branch, safe='')
+        encoded_file_path = quote(file_path, safe='')
+
+        # Get file content using Gerrit REST API
+        # GET /projects/{project-name}/branches/{branch-id}/files/{file-path}/content
+        api_url = f"{base_url}/a/projects/{encoded_project_name}/branches/{encoded_branch}/files/{encoded_file_path}/content"
+
+        headers = {}
+        if access_token and gerrit_user:
+            # HTTP Basic Auth
+            import base64
+            auth_string = f"{gerrit_user}:{access_token}"
+            auth_bytes = auth_string.encode('ascii')
+            auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+            headers["Authorization"] = f"Basic {auth_b64}"
+        elif access_token:
+            # Some Gerrit setups allow token-only auth
+            import base64
+            auth_bytes = access_token.encode('ascii')
+            auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+            headers["Authorization"] = f"Basic {auth_b64}"
+
+        logger.info(f"Fetching file content from Gerrit API: {api_url}")
+        try:
+            response = requests.get(api_url, headers=headers)
+
+            if response.status_code == 200:
+                # Gerrit file content API returns base64-encoded content
+                response_text = response.text
+                # Strip XSSI prefix if present
+                if response_text.startswith(")]}'"):
+                    response_text = response_text[4:]
+                content_data = json.loads(response_text)
+
+                # The response should contain base64-encoded content
+                if isinstance(content_data, str):
+                    # Sometimes the response is directly the base64 string
+                    content = base64.b64decode(content_data).decode('utf-8')
+                elif isinstance(content_data, dict) and 'content' in content_data:
+                    content = base64.b64decode(content_data['content']).decode('utf-8')
+                else:
+                    raise ValueError("Unexpected response format from Gerrit API")
+                return content
+            elif response.status_code == 404:
+                raise ValueError("File not found on Gerrit. Please check the file path and repository.")
+            elif response.status_code == 401:
+                raise ValueError("Unauthorized access to Gerrit. Please check your access token and username.")
+            elif response.status_code == 403:
+                raise ValueError("Forbidden access to Gerrit. You might not have permission to access this file.")
+            else:
+                response.raise_for_status()
+                return response.text
+        except RequestException as e:
+            raise ValueError(f"Error fetching file content from Gerrit: {e}")
+
+    except Exception as e:
+        raise ValueError(f"Failed to get file content from Gerrit: {str(e)}")
+
+
+def get_file_content(repo_url: str, file_path: str, repo_type: str = None, access_token: str = None, gerrit_user: str = None) -> str:
+    """
+    Retrieves the content of a file from a Git repository (GitHub, GitLab, Bitbucket, or Gerrit).
 
     Args:
         repo_type (str): Type of repository
         repo_url (str): The URL of the repository
         file_path (str): The path to the file within the repository
         access_token (str, optional): Access token for private repositories
+        gerrit_user (str, optional): Gerrit username (required for Gerrit repositories)
 
     Returns:
         str: The content of the file as a string
@@ -739,8 +917,10 @@ def get_file_content(repo_url: str, file_path: str, repo_type: str = None, acces
         return get_gitlab_file_content(repo_url, file_path, access_token)
     elif repo_type == "bitbucket":
         return get_bitbucket_file_content(repo_url, file_path, access_token)
+    elif repo_type == "gerrit":
+        return get_gerrit_file_content(repo_url, file_path, access_token, gerrit_user)
     else:
-        raise ValueError("Unsupported repository type. Only GitHub, GitLab, and Bitbucket are supported.")
+        raise ValueError("Unsupported repository type. Only GitHub, GitLab, Bitbucket, and Gerrit are supported.")
 
 class DatabaseManager:
     """
@@ -803,6 +983,16 @@ class DatabaseManager:
             owner = url_parts[-2]
             repo = url_parts[-1].replace(".git", "")
             repo_name = f"{owner}_{repo}"
+        elif repo_type == "gerrit":
+            # Gerrit URL format: http://host:port/a/project-name or http://host:port/project-name
+            # Remove /a/ prefix if present
+            filtered_parts = [p for p in url_parts if p]
+            if filtered_parts and filtered_parts[0] == 'a' and len(filtered_parts) > 1:
+                repo_name = filtered_parts[1].replace(".git", "")
+            elif filtered_parts:
+                repo_name = filtered_parts[-1].replace(".git", "")
+            else:
+                repo_name = "gerrit-project"
         else:
             repo_name = url_parts[-1].replace(".git", "")
         return repo_name
