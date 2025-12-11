@@ -30,6 +30,8 @@ export interface ChatCompletionRequest {
   language?: string;
   excluded_dirs?: string;
   excluded_files?: string;
+  litellm_api_key?: string;
+  litellm_base_url?: string;
 }
 
 /**
@@ -48,29 +50,29 @@ export const createChatWebSocket = (
 ): WebSocket => {
   // Create WebSocket connection
   const ws = new WebSocket(getWebSocketUrl());
-  
+
   // Set up event handlers
   ws.onopen = () => {
     console.log('WebSocket connection established');
     // Send the request as JSON
     ws.send(JSON.stringify(request));
   };
-  
+
   ws.onmessage = (event) => {
     // Call the message handler with the received text
     onMessage(event.data);
   };
-  
+
   ws.onerror = (error) => {
     console.error('WebSocket error:', error);
     onError(error);
   };
-  
+
   ws.onclose = () => {
     console.log('WebSocket connection closed');
     onClose();
   };
-  
+
   return ws;
 };
 

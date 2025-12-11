@@ -41,6 +41,12 @@ interface ModelSelectorProps {
   setIncludedDirs?: (value: string) => void;
   includedFiles?: string;
   setIncludedFiles?: (value: string) => void;
+
+  // LiteLLM provider-specific settings
+  litellmApiKey?: string;
+  setLitellmApiKey?: (value: string) => void;
+  litellmBaseUrl?: string;
+  setLitellmBaseUrl?: (value: string) => void;
 }
 
 export default function UserSelector({
@@ -62,12 +68,44 @@ export default function UserSelector({
   includedDirs = '',
   setIncludedDirs,
   includedFiles = '',
-  setIncludedFiles
+  setIncludedFiles,
+
+  // LiteLLM provider-specific settings
+  litellmApiKey = '',
+  setLitellmApiKey,
+  litellmBaseUrl = '',
+  setLitellmBaseUrl
 }: ModelSelectorProps) {
+  // Create local state for LiteLLM if setters are not provided
+  const [localLitellmApiKey, setLocalLitellmApiKey] = useState(litellmApiKey);
+  const [localLitellmBaseUrl, setLocalLitellmBaseUrl] = useState(litellmBaseUrl);
+
+  // Use provided setters or local state setters
+  const effectiveSetLitellmApiKey = setLitellmApiKey || setLocalLitellmApiKey;
+  const effectiveSetLitellmBaseUrl = setLitellmBaseUrl || setLocalLitellmBaseUrl;
+  const effectiveLitellmApiKey = setLitellmApiKey ? litellmApiKey : localLitellmApiKey;
+  const effectiveLitellmBaseUrl = setLitellmBaseUrl ? litellmBaseUrl : localLitellmBaseUrl;
+
+  // Sync local state when props change (only if using local state)
+  useEffect(() => {
+    if (!setLitellmApiKey) {
+      setLocalLitellmApiKey(litellmApiKey);
+    }
+  }, [litellmApiKey, setLitellmApiKey]);
+
+  useEffect(() => {
+    if (!setLitellmBaseUrl) {
+      setLocalLitellmBaseUrl(litellmBaseUrl);
+    }
+  }, [litellmBaseUrl, setLitellmBaseUrl]);
   // State to manage the visibility of the filters modal and filter section
   const [isFilterSectionOpen, setIsFilterSectionOpen] = useState(false);
   // State to manage filter mode: 'exclude' or 'include'
   const [filterMode, setFilterMode] = useState<'exclude' | 'include'>('exclude');
+
+  // State for LiteLLM connection test
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [connectionTestResult, setConnectionTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const { messages: t } = useLanguage();
 
   // State for model configurations from backend
@@ -376,6 +414,91 @@ next.config.js
               >
                 {t.form?.useCustomModel || 'Use custom model'}
               </label>
+            </div>
+          </div>
+        )}
+
+        {/* LiteLLM provider-specific settings - always show when provider is litellm */}
+        {provider === "litellm" && (
+          <div className="space-y-3 mt-3 p-3 border border-[var(--border-color)]/70 rounded-md bg-[var(--background)]/30">
+            <div>
+              <label htmlFor="litellm-api-key" className="block text-xs font-medium text-[var(--foreground)] mb-1.5">
+                LiteLLM API Key
+              </label>
+              <input
+                id="litellm-api-key"
+                type="password"
+                value={effectiveLitellmApiKey ?? ''}
+                onChange={(e) => {
+                  effectiveSetLitellmApiKey(e.target.value);
+                  setConnectionTestResult(null); // Clear test result when input changes
+                }}
+                className="input-japanese block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
+              />
+            </div>
+            <div>
+              <label htmlFor="litellm-base-url" className="block text-xs font-medium text-[var(--foreground)] mb-1.5">
+                LiteLLM Base URL
+              </label>
+              <input
+                id="litellm-base-url"
+                type="text"
+                value={effectiveLitellmBaseUrl ?? ''}
+                onChange={(e) => {
+                  effectiveSetLitellmBaseUrl(e.target.value);
+                  setConnectionTestResult(null); // Clear test result when input changes
+                }}
+                className="input-japanese block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
+              />
+            </div>
+
+            {/* Test Connection Button */}
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsTestingConnection(true);
+                  setConnectionTestResult(null);
+
+                  try {
+                    const response = await fetch('/api/litellm/test-connection', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        api_key: effectiveLitellmApiKey || undefined,
+                        base_url: effectiveLitellmBaseUrl || undefined,
+                      }),
+                    });
+
+                    const result = await response.json();
+                    setConnectionTestResult(result);
+                  } catch (error) {
+                    setConnectionTestResult({
+                      success: false,
+                      message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+                    });
+                  } finally {
+                    setIsTestingConnection(false);
+                  }
+                }}
+                disabled={isTestingConnection || !effectiveLitellmApiKey || !effectiveLitellmBaseUrl}
+                className="w-full px-3 py-2 text-sm font-medium rounded-md border border-[var(--border-color)]/50 text-[var(--foreground)] bg-transparent hover:bg-[var(--background)] hover:border-[var(--accent-primary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isTestingConnection ? 'Testing...' : 'Test Connection'}
+              </button>
+
+              {/* Connection Test Result */}
+              {connectionTestResult && (
+                <div className={`mt-2 p-2 rounded-md text-xs ${
+                  connectionTestResult.success
+                    ? 'bg-green-500/20 text-green-600 dark:text-green-400 border border-green-500/30'
+                    : 'bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30'
+                }`}>
+                  {connectionTestResult.message}
+                </div>
+              )}
             </div>
           </div>
         )}

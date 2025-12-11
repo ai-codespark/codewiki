@@ -34,7 +34,7 @@ interface ModelSelectionModalProps {
   setIncludedFiles?: (value: string) => void;
   showFileFilters?: boolean;
   showWikiType: boolean;
-  
+
   // Token input for refresh
   showTokenInput?: boolean;
   repositoryType?: 'github' | 'gitlab' | 'bitbucket' | 'gerrit';
@@ -43,6 +43,12 @@ interface ModelSelectionModalProps {
   authCode?: string;
   setAuthCode?: (code: string) => void;
   isAuthLoading?: boolean;
+
+  // LiteLLM provider-specific settings
+  litellmApiKey?: string;
+  setLitellmApiKey?: (value: string) => void;
+  litellmBaseUrl?: string;
+  setLitellmBaseUrl?: (value: string) => void;
 }
 
 export default function ModelSelectionModal({
@@ -75,6 +81,10 @@ export default function ModelSelectionModal({
   showWikiType = true,
   showTokenInput = false,
   repositoryType = 'github',
+  litellmApiKey = '',
+  setLitellmApiKey,
+  litellmBaseUrl = '',
+  setLitellmBaseUrl,
 }: ModelSelectionModalProps) {
   const { messages: t } = useLanguage();
 
@@ -88,7 +98,9 @@ export default function ModelSelectionModal({
   const [localExcludedFiles, setLocalExcludedFiles] = useState(excludedFiles);
   const [localIncludedDirs, setLocalIncludedDirs] = useState(includedDirs);
   const [localIncludedFiles, setLocalIncludedFiles] = useState(includedFiles);
-  
+  const [localLitellmApiKey, setLocalLitellmApiKey] = useState(litellmApiKey);
+  const [localLitellmBaseUrl, setLocalLitellmBaseUrl] = useState(litellmBaseUrl);
+
   // Token input state
   const [localAccessToken, setLocalAccessToken] = useState('');
   const [localSelectedPlatform, setLocalSelectedPlatform] = useState<'github' | 'gitlab' | 'bitbucket' | 'gerrit'>(repositoryType);
@@ -107,11 +119,13 @@ export default function ModelSelectionModal({
       setLocalExcludedFiles(excludedFiles);
       setLocalIncludedDirs(includedDirs);
       setLocalIncludedFiles(includedFiles);
+      setLocalLitellmApiKey(litellmApiKey);
+      setLocalLitellmBaseUrl(litellmBaseUrl);
       setLocalSelectedPlatform(repositoryType);
       setLocalAccessToken('');
       setShowTokenSection(showTokenInput);
     }
-  }, [isOpen, provider, model, isCustomModel, customModel, isComprehensiveView, excludedDirs, excludedFiles, includedDirs, includedFiles, repositoryType, showTokenInput]);
+  }, [isOpen, provider, model, isCustomModel, customModel, isComprehensiveView, excludedDirs, excludedFiles, includedDirs, includedFiles, litellmApiKey, litellmBaseUrl, repositoryType, showTokenInput]);
 
   // Handler for applying changes
   const handleApply = () => {
@@ -124,7 +138,9 @@ export default function ModelSelectionModal({
     if (setExcludedFiles) setExcludedFiles(localExcludedFiles);
     if (setIncludedDirs) setIncludedDirs(localIncludedDirs);
     if (setIncludedFiles) setIncludedFiles(localIncludedFiles);
-    
+    if (setLitellmApiKey) setLitellmApiKey(localLitellmApiKey);
+    if (setLitellmBaseUrl) setLitellmBaseUrl(localLitellmBaseUrl);
+
     // Pass token to onApply if needed
     if (showTokenInput) {
       onApply(localAccessToken);
@@ -188,6 +204,10 @@ export default function ModelSelectionModal({
               setIncludedDirs={showFileFilters ? (value: string) => setLocalIncludedDirs(value) : undefined}
               includedFiles={localIncludedFiles}
               setIncludedFiles={showFileFilters ? (value: string) => setLocalIncludedFiles(value) : undefined}
+              litellmApiKey={localLitellmApiKey}
+              setLitellmApiKey={setLocalLitellmApiKey}
+              litellmBaseUrl={localLitellmBaseUrl}
+              setLitellmBaseUrl={setLocalLitellmBaseUrl}
             />
 
             {/* Token Input Section for refresh */}

@@ -74,6 +74,10 @@ class ChatCompletionRequest(BaseModel):
     included_dirs: Optional[str] = Field(None, description="Comma-separated list of directories to include exclusively")
     included_files: Optional[str] = Field(None, description="Comma-separated list of file patterns to include exclusively")
 
+    # LiteLLM provider-specific settings (overrides .env values if provided)
+    litellm_api_key: Optional[str] = Field(None, description="LiteLLM API key (overrides LITELLM_API_KEY from .env)")
+    litellm_base_url: Optional[str] = Field(None, description="LiteLLM base URL (overrides LITELLM_BASE_URL from .env)")
+
 @app.post("/chat/completions/stream")
 async def chat_completions_stream(request: ChatCompletionRequest):
     """Stream a chat completion response directly using Google Generative AI"""
@@ -457,6 +461,50 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                 "temperature": model_config["temperature"],
                 "top_p": model_config["top_p"]
             }
+
+            api_kwargs = model.convert_inputs_to_api_kwargs(
+                input=prompt,
+                model_kwargs=model_kwargs,
+                model_type=ModelType.LLM
+            )
+        elif request.provider == "litellm":
+            logger.info(f"Using LiteLLM with model: {request.model}, repo_type: {request.type}")
+
+            # Initialize LiteLLM client
+            from api.litellm_client import LiteLLMClient
+            from api.config import LITELLM_API_KEY, LITELLM_BASE_URL
+
+            # Use frontend-provided values if available, otherwise fall back to .env values
+            api_key = request.litellm_api_key if request.litellm_api_key else LITELLM_API_KEY
+            base_url = request.litellm_base_url if request.litellm_base_url else LITELLM_BASE_URL
+
+            # Log configuration status (without exposing values)
+            logger.info(f"LiteLLM config check: API_KEY present={bool(api_key)}, BASE_URL present={bool(base_url)}")
+            logger.info(f"LiteLLM config source: API_KEY from frontend={bool(request.litellm_api_key)}, BASE_URL from frontend={bool(request.litellm_base_url)}")
+
+            try:
+                # Initialize with provided values (or None to use env vars as fallback)
+                model = LiteLLMClient(
+                    api_key=api_key if api_key else None,
+                    base_url=base_url if base_url else None
+                )
+                logger.info(f"LiteLLM client initialized successfully, base_url: {model.base_url}")
+            except Exception as e_init:
+                error_type = type(e_init).__name__
+                logger.error(f"Failed to initialize LiteLLM client: {error_type}: {str(e_init)}", exc_info=True)
+                async def error_stream():
+                    error_msg = f"\nError initializing LiteLLM client: {str(e_init)}\n\nPlease check that you have set the LITELLM_API_KEY and LITELLM_BASE_URL environment variables with valid values, or provide them in the frontend settings."
+                    yield error_msg
+                return StreamingResponse(error_stream(), media_type="text/plain")
+
+            model_kwargs = {
+                "model": request.model,
+                "stream": True,
+                "temperature": model_config["temperature"]
+            }
+            # Only add top_p if it exists in the model config
+            if "top_p" in model_config:
+                model_kwargs["top_p"] = model_config["top_p"]
 
             api_kwargs = model.convert_inputs_to_api_kwargs(
                 input=prompt,

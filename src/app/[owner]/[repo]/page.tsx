@@ -317,6 +317,10 @@ export default function RepoWikiPage() {
   const [modelIncludedDirs, setModelIncludedDirs] = useState(includedDirs);
   const [modelIncludedFiles, setModelIncludedFiles] = useState(includedFiles);
 
+  // LiteLLM provider-specific settings
+  const [litellmApiKey, setLitellmApiKey] = useState('');
+  const [litellmBaseUrl, setLitellmBaseUrl] = useState('');
+
 
   // Wiki type state - default to comprehensive view
   const isComprehensiveParam = searchParams.get('comprehensive') !== 'false';
@@ -2468,6 +2472,10 @@ IMPORTANT:
         authCode={authCode}
         setAuthCode={setAuthCode}
         isAuthLoading={isAuthLoading}
+        litellmApiKey={litellmApiKey}
+        setLitellmApiKey={setLitellmApiKey}
+        litellmBaseUrl={litellmBaseUrl}
+        setLitellmBaseUrl={setLitellmBaseUrl}
       />
     </div>
   );

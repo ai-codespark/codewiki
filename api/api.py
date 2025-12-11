@@ -309,6 +309,87 @@ async def get_model_config():
             defaultProvider="google"
         )
 
+
+class LiteLLMTestConnectionRequest(BaseModel):
+    """Request model for testing LiteLLM connection"""
+    api_key: Optional[str] = Field(None, description="LiteLLM API key")
+    base_url: Optional[str] = Field(None, description="LiteLLM base URL")
+
+
+@app.post("/litellm/test-connection")
+async def test_litellm_connection(request: LiteLLMTestConnectionRequest):
+    """
+    Test the connection to LiteLLM with provided API key and base URL.
+
+    Args:
+        request: LiteLLMTestConnectionRequest containing api_key and base_url
+
+    Returns:
+        Dict with success status and message
+    """
+    from api.config import LITELLM_API_KEY, LITELLM_BASE_URL
+
+    # Use provided values or fall back to .env values
+    api_key = request.api_key if request.api_key else LITELLM_API_KEY
+    base_url = request.base_url if request.base_url else LITELLM_BASE_URL
+
+    if not api_key or not base_url:
+        return {
+            "success": False,
+            "message": "API key and base URL are required. Please provide them in the form or set LITELLM_API_KEY and LITELLM_BASE_URL environment variables."
+        }
+
+    try:
+        # Ensure base URL ends with /v1
+        test_base_url = base_url.rstrip('/')
+        if not test_base_url.endswith('/v1'):
+            test_base_url = f"{test_base_url}/v1"
+
+        models_endpoint = f"{test_base_url}/models"
+
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+
+        logger.info(f"Testing LiteLLM connection: {models_endpoint}")
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(models_endpoint, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    model_count = len(data.get("data", [])) if isinstance(data.get("data"), list) else 0
+                    logger.info(f"LiteLLM connection test successful. Found {model_count} models.")
+                    return {
+                        "success": True,
+                        "message": f"Connection successful! Found {model_count} available models."
+                    }
+                else:
+                    error_text = await response.text()
+                    logger.error(f"LiteLLM connection test failed: {response.status} - {error_text}")
+                    return {
+                        "success": False,
+                        "message": f"Connection failed: {response.status} - {error_text[:200]}"
+                    }
+    except asyncio.TimeoutError:
+        logger.error("Timeout while testing LiteLLM connection")
+        return {
+            "success": False,
+            "message": "Connection timeout. Please check your base URL and network connection."
+        }
+    except aiohttp.ClientError as e:
+        logger.error(f"Client error while testing LiteLLM connection: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Connection error: {str(e)}"
+        }
+    except Exception as e:
+        logger.error(f"Error testing LiteLLM connection: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}"
+        }
+
 @app.post("/export/wiki")
 async def export_wiki(request: WikiExportRequest):
     """

@@ -62,6 +62,12 @@ interface ConfigurationModalProps {
   authCode?: string;
   setAuthCode?: (code: string) => void;
   isAuthLoading?: boolean;
+
+  // LiteLLM provider-specific settings
+  litellmApiKey?: string;
+  setLitellmApiKey?: (value: string) => void;
+  litellmBaseUrl?: string;
+  setLitellmBaseUrl?: (value: string) => void;
 }
 
 export default function ConfigurationModal({
@@ -100,7 +106,11 @@ export default function ConfigurationModal({
   authRequired,
   authCode,
   setAuthCode,
-  isAuthLoading
+  isAuthLoading,
+  litellmApiKey = '',
+  setLitellmApiKey,
+  litellmBaseUrl = '',
+  setLitellmBaseUrl
 }: ConfigurationModalProps) {
   const { messages: t } = useLanguage();
 
@@ -234,6 +244,10 @@ export default function ConfigurationModal({
                 setIncludedDirs={setIncludedDirs}
                 includedFiles={includedFiles}
                 setIncludedFiles={setIncludedFiles}
+                litellmApiKey={litellmApiKey}
+                setLitellmApiKey={setLitellmApiKey}
+                litellmBaseUrl={litellmBaseUrl}
+                setLitellmBaseUrl={setLitellmBaseUrl}
               />
             </div>
 

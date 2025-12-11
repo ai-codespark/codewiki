@@ -50,6 +50,10 @@ class ChatCompletionRequest(BaseModel):
     included_dirs: Optional[str] = Field(None, description="Comma-separated list of directories to include exclusively")
     included_files: Optional[str] = Field(None, description="Comma-separated list of file patterns to include exclusively")
 
+    # LiteLLM provider-specific settings (overrides .env values if provided)
+    litellm_api_key: Optional[str] = Field(None, description="LiteLLM API key (overrides LITELLM_API_KEY from .env)")
+    litellm_base_url: Optional[str] = Field(None, description="LiteLLM base URL (overrides LITELLM_BASE_URL from .env)")
+
 async def handle_websocket_chat(websocket: WebSocket):
     """
     Handle WebSocket connection for chat completions.
@@ -567,11 +571,20 @@ This file contains...
             from api.litellm_client import LiteLLMClient
             from api.config import LITELLM_API_KEY, LITELLM_BASE_URL
 
-            # Log environment variable status (without exposing values)
-            logger.info(f"LiteLLM config check: API_KEY present={bool(LITELLM_API_KEY)}, BASE_URL present={bool(LITELLM_BASE_URL)}")
+            # Use frontend-provided values if available, otherwise fall back to .env values
+            api_key = request.litellm_api_key if request.litellm_api_key else LITELLM_API_KEY
+            base_url = request.litellm_base_url if request.litellm_base_url else LITELLM_BASE_URL
+
+            # Log configuration status (without exposing values)
+            logger.info(f"LiteLLM config check: API_KEY present={bool(api_key)}, BASE_URL present={bool(base_url)}")
+            logger.info(f"LiteLLM config source: API_KEY from frontend={bool(request.litellm_api_key)}, BASE_URL from frontend={bool(request.litellm_base_url)}")
 
             try:
-                model = LiteLLMClient()
+                # Initialize with provided values (or None to use env vars as fallback)
+                model = LiteLLMClient(
+                    api_key=api_key if api_key else None,
+                    base_url=base_url if base_url else None
+                )
                 logger.info(f"LiteLLM client initialized successfully, base_url: {model.base_url}")
             except Exception as e_init:
                 error_type = type(e_init).__name__

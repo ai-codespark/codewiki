@@ -64,6 +64,8 @@ const Ask: React.FC<AskProps> = ({
   const [customSelectedModel, setCustomSelectedModel] = useState(customModel);
   const [isModelSelectionModalOpen, setIsModelSelectionModalOpen] = useState(false);
   const [isComprehensiveView, setIsComprehensiveView] = useState(true);
+  const [litellmApiKey, setLitellmApiKey] = useState('');
+  const [litellmBaseUrl, setLitellmBaseUrl] = useState('');
 
   // Get language context for translations
   const { messages } = useLanguage();
@@ -328,6 +330,16 @@ const Ask: React.FC<AskProps> = ({
         requestBody.token = repoInfo.token;
       }
 
+      // Add LiteLLM settings if provider is litellm and values are provided
+      if (selectedProvider === 'litellm') {
+        if (litellmApiKey) {
+          requestBody.litellm_api_key = litellmApiKey;
+        }
+        if (litellmBaseUrl) {
+          requestBody.litellm_base_url = litellmBaseUrl;
+        }
+      }
+
       // Close any existing WebSocket connection
       closeWebSocket(webSocketRef.current);
 
@@ -568,6 +580,16 @@ const Ask: React.FC<AskProps> = ({
       // Add tokens if available
       if (repoInfo?.token) {
         requestBody.token = repoInfo.token;
+      }
+
+      // Add LiteLLM settings if provider is litellm and values are provided
+      if (selectedProvider === 'litellm') {
+        if (litellmApiKey) {
+          requestBody.litellm_api_key = litellmApiKey;
+        }
+        if (litellmBaseUrl) {
+          requestBody.litellm_base_url = litellmBaseUrl;
+        }
       }
 
       // Close any existing WebSocket connection
@@ -920,6 +942,10 @@ const Ask: React.FC<AskProps> = ({
         showWikiType={false}
         authRequired={false}
         isAuthLoading={false}
+        litellmApiKey={litellmApiKey}
+        setLitellmApiKey={setLitellmApiKey}
+        litellmBaseUrl={litellmBaseUrl}
+        setLitellmBaseUrl={setLitellmBaseUrl}
       />
     </div>
   );
