@@ -1,0 +1,7 @@
+# Ignore Python backend - it's deployed separately
+api/
+*.py
+pyproject.toml
+poetry.lock
+uv.lock
+pytest.ini

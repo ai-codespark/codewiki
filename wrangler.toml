@@ -1,0 +1,9 @@
+# Cloudflare Pages config for CodeWiki frontend
+name = "codewiki"
+
+# Pages deployment configuration
+pages_build_output_dir = ".vercel/output/static"
+
+# Environment variables
+[vars]
+NODE_VERSION = "20"

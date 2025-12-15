@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import mermaid from 'mermaid';
-// We'll use dynamic import for svg-pan-zoom
+// Mermaid will be dynamically imported on client side only
 
-// Initialize mermaid with defaults - Japanese aesthetic
-mermaid.initialize({
+// Mermaid initialization config
+const mermaidConfig = {
   startOnLoad: true,
   theme: 'neutral',
   securityLevel: 'loose',
@@ -167,7 +166,8 @@ mermaid.initialize({
   `,
   fontFamily: 'var(--font-geist-sans), var(--font-serif-jp), sans-serif',
   fontSize: 12,
-});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+} as any;
 
 interface MermaidProps {
   chart: string;
@@ -364,6 +364,10 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
       try {
         setError(null);
         setSvg('');
+
+        // Dynamically import mermaid on client side only
+        const mermaid = (await import('mermaid')).default;
+        mermaid.initialize(mermaidConfig);
 
         // Render the chart directly without preprocessing
         const { svg: renderedSvg } = await mermaid.render(idRef.current, chart);

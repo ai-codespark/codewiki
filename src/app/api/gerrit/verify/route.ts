@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = 'edge';
+
 /**
  * Verifies if a URL points to a Gerrit project by calling the /config/server/version endpoint.
  * This is done server-side to avoid CORS issues.

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const runtime = 'edge';
+
 // This should match the expected structure from your Python backend
 interface ApiProcessedProject {
   id: string;
