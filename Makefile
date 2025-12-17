@@ -29,7 +29,7 @@ deploy-frontend: build-frontend ## 构建并部署前端到 Cloudflare Pages
 
 deploy-backend: ## 部署后端到 Cloudflare Workers
 	@echo "🚀 部署后端到 Cloudflare Workers..."
-	@cd api && wrangler deploy
+	@cd api && npx wrangler deploy
 
 deploy-all: deploy-frontend deploy-backend ## 部署前端和后端
 
@@ -45,14 +45,14 @@ secrets-help: ## 显示如何设置密钥
 	@echo "🔐 设置 Cloudflare 密钥:"
 	@echo ""
 	@echo "前端密钥:"
-	@echo "  wrangler secret put GOOGLE_API_KEY"
-	@echo "  wrangler secret put OPENAI_API_KEY"
-	@echo "  wrangler secret put LITELLM_API_KEY"
+	@echo "  npx wrangler secret put GOOGLE_API_KEY"
+	@echo "  npx wrangler secret put OPENAI_API_KEY"
+	@echo "  npx wrangler secret put LITELLM_API_KEY"
 	@echo ""
 	@echo "后端密钥:"
-	@echo "  cd api && wrangler secret put GOOGLE_API_KEY"
-	@echo "  cd api && wrangler secret put OPENAI_API_KEY"
-	@echo "  cd api && wrangler secret put LITELLM_API_KEY"
+	@echo "  cd api && npx wrangler secret put GOOGLE_API_KEY"
+	@echo "  cd api && npx wrangler secret put OPENAI_API_KEY"
+	@echo "  cd api && npx wrangler secret put LITELLM_API_KEY"
 
 clean: ## 清理构建文件
 	@echo "🧹 清理构建文件..."
