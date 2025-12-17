@@ -1,0 +1,32 @@
+# Cloudflare Workers configuration for DeepWiki backend API
+name = "deepwiki-backend"
+main = "worker.py"
+compatibility_date = "2024-01-01"
+
+# Python Workers configuration
+[python]
+requirements = "requirements.txt"
+
+# Environment variables
+# Public variables (non-sensitive configuration)
+# To sync from .env.local, run: python ../sync_env_to_wrangler.py
+[vars]
+NODE_ENV = "production"
+PORT = "8001"
+AWS_REGION = "us-east-1"
+AZURE_OPENAI_VERSION = "2024-02-15-preview"
+DEEPWIKI_EMBEDDER_TYPE = "litellm"
+LITELLM_BASE_URL = "https://your-litellm-server.com"
+OLLAMA_HOST = "http://localhost:11434"
+SERVER_BASE_URL = "http://localhost:8001"
+[limits]
+cpu_ms = 50
+
+# Deploy configuration
+[build]
+command = ""
+
+# Routes configuration (optional - configure custom domain)
+# [[routes]]
+# pattern = "api.yourdomain.com/*"
+# zone_name = "yourdomain.com"

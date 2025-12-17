@@ -9,5 +9,14 @@ compatibility_date = "2024-12-16"
 compatibility_flags = ["nodejs_compat"]
 
 # Environment variables
+# Public variables (non-sensitive configuration)
+# Secrets should be set via: wrangler secret put <KEY>
+# To sync from .env.local, run: python sync_env_to_wrangler.py
 [vars]
 NODE_VERSION = "20"
+AWS_REGION = "us-east-1"
+AZURE_OPENAI_VERSION = "2024-02-15-preview"
+DEEPWIKI_EMBEDDER_TYPE = "litellm"
+LITELLM_BASE_URL = "https://your-litellm-server.com"
+OLLAMA_HOST = "http://localhost:11434"
+SERVER_BASE_URL = "http://localhost:8001"

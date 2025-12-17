@@ -2,6 +2,34 @@
 
 This guide explains how to deploy the DeepWiki frontend on Cloudflare Pages and the backend as a Cloudflare Worker.
 
+## Quick Links
+
+- 📝 [Environment Variables Sync Guide](ENVIRONMENT_SYNC.md) - Automate `.env.local` to `wrangler.toml` sync
+- 🚀 [Frontend Deployment](#frontend-deployment-cloudflare-pages)
+- 🔧 [Backend Deployment Options](#backend-deployment-options)
+- 📋 [Quick Reference](#quick-reference) - Command cheat sheet
+
+## Quick Start with Make
+
+For convenience, use the provided Makefile:
+
+```bash
+# Show all available commands
+make help
+
+# Sync environment variables
+make sync-env
+
+# Build and deploy frontend
+make deploy-frontend
+
+# Deploy backend
+make deploy-backend
+
+# Deploy everything
+make deploy-all
+```
+
 ## Prerequisites
 
 - Cloudflare account
@@ -51,6 +79,20 @@ export CLOUDFLARE_API_TOKEN="your-api-token-here"
 
 ### Step 4: Deploy to Cloudflare Pages
 
+First, sync your environment variables (optional but recommended):
+
+```bash
+# Sync public vars from .env.local to wrangler.toml
+python sync_env_to_wrangler.py --frontend-only
+
+# Set secret keys via CLI
+wrangler secret put GOOGLE_API_KEY
+wrangler secret put OPENAI_API_KEY
+# ... add other secrets as needed
+```
+
+Then deploy:
+
 ```bash
 npx wrangler pages deploy .vercel/output/static --project-name codewiki
 ```
@@ -77,16 +119,98 @@ The Python backend (`api/` folder) needs to be deployed separately. Choose one o
 
 ### Option 1: Cloudflare Workers (Python Workers)
 
-**Note**: Cloudflare Workers for Python is in beta. For production, consider Option 2 or 3.
+**Note**: Cloudflare Workers for Python is in beta. For production workloads, ensure you test thoroughly or consider Option 2 or 3.
 
-1. Install dependencies:
+#### Prerequisites
+
+- Wrangler CLI installed: `npm install -g wrangler`
+- Cloudflare account with Workers enabled
+- Python 3.11+ installed locally
+
+#### Step 1: Configure Environment Variables
+
+First, sync public environment variables from `.env.local`:
+
 ```bash
-cd api
-pip install -r requirements.txt
+# Sync public vars to api/wrangler.toml
+python sync_env_to_wrangler.py --backend-only
 ```
 
-2. Create a Worker-compatible entry point
-3. Deploy using Wrangler
+Then set your API keys as secrets (these are encrypted and not exposed in code):
+
+```bash
+cd api
+
+# Required secrets
+wrangler secret put GOOGLE_API_KEY
+wrangler secret put OPENAI_API_KEY
+
+# Optional secrets (if used in your .env.local)
+wrangler secret put AZURE_OPENAI_API_KEY
+wrangler secret put AZURE_OPENAI_ENDPOINT
+wrangler secret put AZURE_OPENAI_VERSION
+wrangler secret put OPENROUTER_API_KEY
+wrangler secret put LITELLM_API_KEY
+wrangler secret put OLLAMA_HOST
+```
+
+#### Step 2: Review Configuration
+
+The `api/wrangler.toml` file is pre-configured for Workers deployment:
+
+```toml
+name = "deepwiki-backend"
+main = "worker.py"
+compatibility_date = "2024-01-01"
+
+[python]
+requirements = "requirements.txt"
+```
+
+You can customize the worker name or add custom domains if needed.
+
+#### Step 3: Test Locally
+
+Test the worker locally before deploying:
+
+```bash
+cd api
+wrangler dev
+```
+
+This starts a local development server at `http://localhost:8787`
+
+#### Step 4: Deploy to Cloudflare Workers
+
+Deploy the backend:
+
+```bash
+cd api
+wrangler deploy
+```
+
+After deployment, Wrangler will provide your Worker URL (e.g., `https://deepwiki-backend.your-subdomain.workers.dev`).
+
+#### Step 5: Update Frontend Configuration
+
+Update the `SERVER_BASE_URL` in your Cloudflare Pages environment variables to point to your Worker URL:
+
+```
+SERVER_BASE_URL=https://deepwiki-backend.your-subdomain.workers.dev
+```
+
+#### Important Notes
+
+- **Python Workers Limitations**:
+  - 50ms CPU time limit per request (can be increased with paid plans)
+  - Some packages may not be compatible with the Workers runtime
+  - Cold starts may take longer with many dependencies
+
+- **Dependencies**: The `api/requirements.txt` is optimized for Workers deployment (excludes development-only packages like `adalflow` and `watchfiles`)
+
+- **Entry Point**: The `api/worker.py` file serves as the Workers entry point, wrapping the FastAPI application
+
+- **Monitoring**: View logs and metrics in the Cloudflare Dashboard → Workers & Pages → deepwiki-backend
 
 ### Option 2: Traditional Cloud Services
 
@@ -125,6 +249,38 @@ python -m api.main
 Ensure the server is accessible at a public URL and update `SERVER_BASE_URL` in your Pages deployment.
 
 ## Configuration Files
+
+### Environment Variables Sync
+
+To simplify deployment, use the provided script to sync environment variables from `.env.local` to `wrangler.toml` files:
+
+```bash
+# Sync to both frontend and backend wrangler.toml
+python sync_env_to_wrangler.py
+
+# Sync to frontend only
+python sync_env_to_wrangler.py --frontend-only
+
+# Sync to backend only
+python sync_env_to_wrangler.py --backend-only
+```
+
+The script automatically:
+- Reads all environment variables from `.env.local`
+- Updates public variables in the `[vars]` section of wrangler.toml files
+- Identifies secret keys (API keys, tokens) that should be set via `wrangler secret put`
+- Provides CLI commands to set secrets securely
+
+**Important**: Secret keys (like `GOOGLE_API_KEY`, `OPENAI_API_KEY`) are never written to wrangler.toml. They must be set using:
+
+```bash
+# For frontend secrets
+wrangler secret put GOOGLE_API_KEY
+
+# For backend secrets
+cd api
+wrangler secret put GOOGLE_API_KEY
+```
 
 ### wrangler.toml
 
@@ -237,14 +393,89 @@ Access the app at `http://localhost:3000`
 - [ ] HTTPS enabled (automatic on Cloudflare)
 - [ ] Test all features: wiki generation, chat, diagrams
 
-## Useful Commands
+## Quick Reference
+
+### Environment Variable Sync Commands
+
+```bash
+# Sync all (frontend + backend)
+python sync_env_to_wrangler.py
+
+# Frontend only
+python sync_env_to_wrangler.py --frontend-only
+
+# Backend only
+python sync_env_to_wrangler.py --backend-only
+
+# Or use shell script
+./sync-env.sh
+```
+
+### Secret Management
+
+```bash
+# Set frontend secrets
+wrangler secret put <KEY_NAME>
+
+# Set backend secrets
+cd api && wrangler secret put <KEY_NAME>
+```
+
+### Auto-Detected Secret Variables
+
+The following variables are automatically treated as secrets (not written to wrangler.toml):
+
+- `GOOGLE_API_KEY`
+- `OPENAI_API_KEY`
+- `AZURE_OPENAI_API_KEY`
+- `AZURE_OPENAI_ENDPOINT`
+- `OPENROUTER_API_KEY`
+- `LITELLM_API_KEY`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+
+### Configuration Files
+
+- **Source**: `.env.local` (local, not committed to Git)
+- **Frontend Config**: `wrangler.toml`
+- **Backend Config**: `api/wrangler.toml`
+- **Example**: `.env.local.example`
+
+### Typical Workflow
+
+1. Edit `.env.local` with your configuration
+2. Run `python sync_env_to_wrangler.py`
+3. Set secrets: `wrangler secret put <KEY_NAME>` (for each secret)
+4. Deploy your application
+
+### Deployment Commands
+
+```bash
+# Frontend deployment
+npx wrangler pages deploy .vercel/output/static --project-name codewiki
+
+# Backend deployment
+cd api && wrangler deploy
+```
+
+### Makefile Commands
+
+```bash
+make help              # Show all available commands
+make sync-env          # Sync environment variables
+make deploy-frontend   # Build and deploy frontend
+make deploy-backend    # Deploy backend
+make deploy-all        # Deploy everything
+make dev-frontend      # Start frontend dev server
+make dev-backend       # Start backend dev server
+make secrets-help      # Show how to set secrets
+```
+
+### Build and Utility Commands
 
 ```bash
 # Build for Cloudflare
 npx @cloudflare/next-on-pages
-
-# Deploy to Pages
-npx wrangler pages deploy .vercel/output/static --project-name codewiki
 
 # Check Wrangler status
 npx wrangler whoami
@@ -255,6 +486,18 @@ npx wrangler pages deployment list --project-name codewiki
 # Clean build artifacts
 rm -rf .next .vercel
 ```
+
+### Important Reminders
+
+⚠️ **Security Best Practices:**
+- Never commit `.env.local` to version control
+- Secrets are set via CLI, not written to wrangler.toml
+- Back up existing configuration before syncing
+- Rotate API keys regularly
+
+📚 **Additional Documentation:**
+- [Environment Sync Guide](ENVIRONMENT_SYNC.md) - Complete guide
+- [Feature Summary](ENV_SYNC_SUMMARY.md) - Overview of sync functionality
 
 ## Support
 
