@@ -6,7 +6,14 @@ This script reads environment variables from .env.local and updates
 both the frontend (root) and backend (api/) wrangler.toml files.
 
 Usage:
-    python sync_env_to_wrangler.py [--frontend-only | --backend-only]
+    python sync_env_to_wrangler.py [options]
+
+Options:
+    --frontend-only     Only update frontend wrangler.toml
+    --backend-only      Only update backend wrangler.toml
+    --all-vars          Sync ALL variables (including secrets) to [vars] section
+    --include-secrets   Add [secrets] section with all secret variables (commented)
+    --help              Show this help message
 """
 
 import os
@@ -83,8 +90,21 @@ def get_secret_keys(env_vars: Dict[str, str]) -> Set[str]:
     return {k for k in env_vars.keys() if k in SECRET_KEYS}
 
 
-def update_wrangler_toml(wrangler_path: Path, env_vars: Dict[str, str]) -> bool:
-    """Update wrangler.toml with environment variables."""
+def get_secret_vars(env_vars: Dict[str, str]) -> Dict[str, str]:
+    """Get secret environment variables."""
+    return {k: v for k, v in env_vars.items() if k in SECRET_KEYS}
+
+
+def update_wrangler_toml(wrangler_path: Path, env_vars: Dict[str, str],
+                         include_all: bool = False, include_secrets_section: bool = False) -> bool:
+    """Update wrangler.toml with environment variables.
+
+    Args:
+        wrangler_path: Path to wrangler.toml file
+        env_vars: Dictionary of environment variables
+        include_all: If True, sync all variables to [vars] section
+        include_secrets_section: If True, add [secrets] section with commented secrets
+    """
     if not wrangler_path.exists():
         print(f"Warning: {wrangler_path} not found")
         return False
@@ -92,8 +112,11 @@ def update_wrangler_toml(wrangler_path: Path, env_vars: Dict[str, str]) -> bool:
     with open(wrangler_path, 'r') as f:
         content = f.read()
 
-    # Get only public vars (non-secrets)
-    public_vars = get_public_vars(env_vars)
+    # Determine which vars to sync
+    if include_all:
+        vars_to_sync = env_vars  # Include everything
+    else:
+        vars_to_sync = get_public_vars(env_vars)  # Only public vars
 
     # Build new [vars] section
     vars_section_lines = ["[vars]"]
@@ -101,29 +124,47 @@ def update_wrangler_toml(wrangler_path: Path, env_vars: Dict[str, str]) -> bool:
     # Preserve certain default variables from the existing file
     preserve_vars = ['NODE_VERSION', 'NODE_ENV', 'PORT']
     for var in preserve_vars:
-        if var not in public_vars:  # Only preserve if not in env_vars
+        if var not in vars_to_sync:  # Only preserve if not in env_vars
             match = re.search(rf'{var}\s*=\s*"([^"]+)"', content)
             if match:
                 vars_section_lines.append(f'{var} = "{match.group(1)}"')
 
-    # Add public environment variables (sorted for consistency)
-    for key, value in sorted(public_vars.items()):
+    # Add environment variables (sorted for consistency)
+    for key, value in sorted(vars_to_sync.items()):
         # Escape quotes in value
         escaped_value = value.replace('"', '\\"')
         vars_section_lines.append(f'{key} = "{escaped_value}"')
 
     new_vars_section = '\n'.join(vars_section_lines)
 
+    # Build secrets section if requested
+    new_secrets_section = ""
+    if include_secrets_section:
+        secret_vars = get_secret_vars(env_vars)
+        if secret_vars:
+            secrets_lines = ["\n[secrets]"]
+            secrets_lines.append("# Secret values - set these using: wrangler secret put KEY")
+            for key, value in sorted(secret_vars.items()):
+                secrets_lines.append(f"# {key} = \"PLACEHOLDER\"")
+            new_secrets_section = '\n'.join(secrets_lines)
+
     # Replace existing [vars] section
     # Match [vars] section until the next section or end of file
     vars_pattern = r'\[vars\][\s\S]*?(?=\n\[|\Z)'
 
+    # Replace existing sections
     if '[vars]' in content:
-        # Replace existing [vars] section
         new_content = re.sub(vars_pattern, new_vars_section, content)
     else:
-        # Add [vars] section at the end
         new_content = content.rstrip() + '\n\n' + new_vars_section + '\n'
+
+    # Replace or add [secrets] section if needed
+    if include_secrets_section and new_secrets_section:
+        secrets_pattern = r'\[secrets\][\s\S]*?(?=\n\[|\Z)'
+        if '[secrets]' in new_content:
+            new_content = re.sub(secrets_pattern, new_secrets_section.lstrip('\n'), new_content)
+        else:
+            new_content = new_content.rstrip() + new_secrets_section + '\n'
 
     # Write updated content
     with open(wrangler_path, 'w') as f:
@@ -152,6 +193,13 @@ def main():
     # Parse command line arguments
     frontend_only = '--frontend-only' in sys.argv
     backend_only = '--backend-only' in sys.argv
+    include_all = '--all-vars' in sys.argv
+    include_secrets_section = '--include-secrets' in sys.argv
+    show_help = '--help' in sys.argv
+
+    if show_help:
+        print(__doc__)
+        return
 
     # Get paths
     root_dir = Path(__file__).parent
@@ -173,25 +221,39 @@ def main():
     secret_keys = get_secret_keys(env_vars)
     public_count = len(env_vars) - len(secret_keys)
 
-    print(f"  - {public_count} public variables (will be added to [vars])")
-    print(f"  - {len(secret_keys)} secret variables (need to be set via CLI)")
+    # Display mode information
+    if include_all:
+        print("  📌 Mode: ALL VARIABLES (including secrets)")
+        print(f"  - {len(env_vars)} variables will be synced to [vars]")
+    else:
+        print(f"  - {public_count} public variables (will be added to [vars])")
+        print(f"  - {len(secret_keys)} secret variables (need to be set via CLI)")
+
+    if include_secrets_section:
+        print("  - [secrets] section with comments will be added for reference")
+
     print()
 
     # Update frontend wrangler.toml
     if not backend_only:
-        if update_wrangler_toml(frontend_wrangler, env_vars):
-            print_secret_instructions(secret_keys, "frontend")
+        if update_wrangler_toml(frontend_wrangler, env_vars, include_all, include_secrets_section):
+            if not include_all:
+                print_secret_instructions(secret_keys, "frontend")
 
     # Update backend wrangler.toml
     if not frontend_only:
-        if update_wrangler_toml(backend_wrangler, env_vars):
-            print_secret_instructions(secret_keys, "backend (api/)")
+        if update_wrangler_toml(backend_wrangler, env_vars, include_all, include_secrets_section):
+            if not include_all:
+                print_secret_instructions(secret_keys, "backend (api/)")
 
     print("✅ Environment sync complete!")
-    print("\nNext steps:")
-    print("1. Review the updated wrangler.toml files")
-    print("2. Set secrets using the wrangler CLI commands above")
-    print("3. Deploy: npx wrangler pages deploy (frontend) or cd api && wrangler deploy (backend)")
+    print("\nUsage options:")
+    print("  python sync_env_to_wrangler.py                # Sync public vars only")
+    print("  python sync_env_to_wrangler.py --all-vars    # Sync ALL variables")
+    print("  python sync_env_to_wrangler.py --include-secrets  # Add [secrets] section (commented)")
+    print("  python sync_env_to_wrangler.py --frontend-only    # Frontend only")
+    print("  python sync_env_to_wrangler.py --backend-only     # Backend only")
+    print("  python sync_env_to_wrangler.py --help         # Show help")
 
 
 if __name__ == '__main__':

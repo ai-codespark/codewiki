@@ -82,13 +82,19 @@ export CLOUDFLARE_API_TOKEN="your-api-token-here"
 First, sync your environment variables (optional but recommended):
 
 ```bash
-# Sync public vars from .env.local to wrangler.toml
+# Option 1: Sync public vars only (recommended for security)
 python sync_env_to_wrangler.py --frontend-only
 
-# Set secret keys via CLI
+# Then set secret keys via CLI
 wrangler secret put GOOGLE_API_KEY
 wrangler secret put OPENAI_API_KEY
 # ... add other secrets as needed
+
+# Option 2: Sync all variables at once
+python sync_env_to_wrangler.py --all-vars --frontend-only
+
+# Option 3: Sync with secrets section for reference
+python sync_env_to_wrangler.py --include-secrets --frontend-only
 ```
 
 Then deploy:
@@ -129,29 +135,28 @@ The Python backend (`api/` folder) needs to be deployed separately. Choose one o
 
 #### Step 1: Configure Environment Variables
 
-First, sync public environment variables from `.env.local`:
+Sync environment variables from `.env.local` to backend config:
 
 ```bash
-# Sync public vars to api/wrangler.toml
+# Option 1: Sync public vars only (recommended)
 python sync_env_to_wrangler.py --backend-only
-```
 
-Then set your API keys as secrets (these are encrypted and not exposed in code):
-
-```bash
+# Then set your API keys as secrets (encrypted, not in code)
 cd api
-
-# Required secrets
 wrangler secret put GOOGLE_API_KEY
 wrangler secret put OPENAI_API_KEY
+wrangler secret put AZURE_OPENAI_API_KEY        # optional
+wrangler secret put AZURE_OPENAI_ENDPOINT       # optional
+wrangler secret put AZURE_OPENAI_VERSION        # optional
+wrangler secret put OPENROUTER_API_KEY          # optional
+wrangler secret put LITELLM_API_KEY             # optional
+wrangler secret put OLLAMA_HOST                 # optional
 
-# Optional secrets (if used in your .env.local)
-wrangler secret put AZURE_OPENAI_API_KEY
-wrangler secret put AZURE_OPENAI_ENDPOINT
-wrangler secret put AZURE_OPENAI_VERSION
-wrangler secret put OPENROUTER_API_KEY
-wrangler secret put LITELLM_API_KEY
-wrangler secret put OLLAMA_HOST
+# Option 2: Sync all variables at once
+python sync_env_to_wrangler.py --all-vars --backend-only
+
+# Option 3: Include secrets section for reference
+python sync_env_to_wrangler.py --include-secrets --backend-only
 ```
 
 #### Step 2: Review Configuration
@@ -255,21 +260,27 @@ Ensure the server is accessible at a public URL and update `SERVER_BASE_URL` in 
 To simplify deployment, use the provided script to sync environment variables from `.env.local` to `wrangler.toml` files:
 
 ```bash
-# Sync to both frontend and backend wrangler.toml
+# Default: Sync public vars only (recommended for secrets)
 python sync_env_to_wrangler.py
 
-# Sync to frontend only
-python sync_env_to_wrangler.py --frontend-only
+# Sync ALL variables including secrets to [vars] section
+python sync_env_to_wrangler.py --all-vars
 
-# Sync to backend only
-python sync_env_to_wrangler.py --backend-only
+# Add [secrets] section with commented references
+python sync_env_to_wrangler.py --include-secrets
+
+# Combine with target selection
+python sync_env_to_wrangler.py --all-vars --frontend-only
+python sync_env_to_wrangler.py --include-secrets --backend-only
 ```
 
 The script automatically:
 - Reads all environment variables from `.env.local`
 - Updates public variables in the `[vars]` section of wrangler.toml files
-- Identifies secret keys (API keys, tokens) that should be set via `wrangler secret put`
-- Provides CLI commands to set secrets securely
+- Identifies secret keys (API keys, tokens) for secure handling
+- Supports `--all-vars` to sync all variables including secrets
+- Supports `--include-secrets` to add a [secrets] section with commented references
+- Provides CLI commands to set secrets securely via `wrangler secret put`
 
 **Important**: Secret keys (like `GOOGLE_API_KEY`, `OPENAI_API_KEY`) are never written to wrangler.toml. They must be set using:
 
@@ -398,14 +409,25 @@ Access the app at `http://localhost:3000`
 ### Environment Variable Sync Commands
 
 ```bash
-# Sync all (frontend + backend)
+# Default: Sync public variables only
 python sync_env_to_wrangler.py
 
-# Frontend only
-python sync_env_to_wrangler.py --frontend-only
+# Sync ALL variables (including secrets)
+python sync_env_to_wrangler.py --all-vars
 
-# Backend only
+# Add [secrets] section with commented references
+python sync_env_to_wrangler.py --include-secrets
+
+# Target specific deployment
+python sync_env_to_wrangler.py --frontend-only
 python sync_env_to_wrangler.py --backend-only
+
+# Combine options
+python sync_env_to_wrangler.py --all-vars --frontend-only
+python sync_env_to_wrangler.py --include-secrets --backend-only
+
+# Show help
+python sync_env_to_wrangler.py --help
 
 # Or use shell script
 ./sync-env.sh
