@@ -8,7 +8,7 @@ help: ## 显示帮助信息
 
 sync-env: ## 同步环境变量到 wrangler.toml (前端+后端)
 	@echo "🔄 同步环境变量..."
-	@python sync_env_to_wrangler.py
+	@python sync_env_to_wrangler.py --all-vars
 
 sync-frontend: ## 仅同步前端环境变量
 	@echo "🔄 同步前端环境变量..."

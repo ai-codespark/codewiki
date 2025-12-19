@@ -69,3 +69,4 @@ next-env.d.ts
 certs/
 
 .env.local
+api/node_modules/
