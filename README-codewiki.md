@@ -1,6 +1,6 @@
-# DeepWiki Cloudflare Deployment Guide
+# CodeWiki Cloudflare Deployment Guide
 
-This guide explains how to deploy the DeepWiki frontend on Cloudflare Pages and the backend as a Cloudflare Worker.
+This guide explains how to deploy the CodeWiki frontend on Cloudflare Pages and the backend as a Cloudflare Worker.
 
 ## Quick Links
 
@@ -20,14 +20,22 @@ make help
 # Sync environment variables
 make sync-env
 
-# Build and deploy frontend
+# Install dependency
+make install
+
+# Set deployment variables for frontend
+npx wrangler whoami
+export CLOUDFLARE_ACCOUNT_ID="your-account-id-here"
+export CLOUDFLARE_API_TOKEN="your-api-token-here"
+
+# Build and deploy frontend on cloudflare
 make deploy-frontend
 
-# Deploy backend
-make deploy-backend
+# Set deployment variables for backend
+export GCP_PROJECT_ID="your-project-id-here"
 
-# Deploy everything
-make deploy-all
+# Deploy backend on Google Cloud
+make docker-deploy-gcp
 ```
 
 ## Prerequisites
@@ -123,9 +131,83 @@ DEEPWIKI_EMBEDDER_TYPE=google (optional, defaults to openai)
 
 The Python backend (`api/` folder) needs to be deployed separately. Choose one of these options:
 
-### Option 1: Cloudflare Workers (Python Workers)
+### ⚠️ Important: Cloudflare Workers Limitation
 
-**Note**: Cloudflare Workers for Python is in beta. For production workloads, ensure you test thoroughly or consider Option 2 or 3.
+**Cloudflare Workers for Python does NOT support FastAPI and many Python packages** used in this project. Deploying to Workers will fail with `ModuleNotFoundError: No module named 'fastapi'`.
+
+**Recommended: Use Option 1 (Docker + Cloud Services) instead.**
+
+### Option 1: Docker + Cloud Services (RECOMMENDED)
+
+Deploy the backend using Docker to services that support full Python environments:
+
+#### Google Cloud Run (Easiest)
+
+```bash
+# 1. Build the Docker image
+docker build -t codewiki-backend .
+
+# 2. Tag for Google Container Registry
+docker tag codewiki-backend gcr.io/YOUR_PROJECT_ID/codewiki-backend
+
+# 3. Push to GCR
+docker push gcr.io/YOUR_PROJECT_ID/codewiki-backend
+
+# 4. Deploy to Cloud Run
+gcloud run deploy codewiki-backend \
+  --image gcr.io/YOUR_PROJECT_ID/codewiki-backend \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars="OPENAI_API_KEY=your_key,GOOGLE_API_KEY=your_key"
+```
+
+#### Fly.io (Simple & Fast)
+
+```bash
+# 1. Install flyctl
+curl -L https://fly.io/install.sh | sh
+
+# 2. Login and launch
+fly auth login
+fly launch
+
+# 3. Set secrets
+fly secrets set OPENAI_API_KEY=your_key
+fly secrets set GOOGLE_API_KEY=your_key
+
+# 4. Deploy
+fly deploy
+```
+
+#### Railway.app (One-Click Deploy)
+
+1. Visit https://railway.app
+2. Connect your GitHub repository
+3. Select the `Dockerfile` build
+4. Add environment variables in the dashboard
+5. Deploy with one click
+
+### Option 2: Cloudflare Workers (NOT SUPPORTED - DO NOT USE)
+
+**❌ This option does NOT work due to Python Workers limitations.**
+
+Cloudflare Workers for Python is in beta and has severe limitations:
+
+**❌ This option does NOT work due to Python Workers limitations.**
+
+Cloudflare Workers for Python is in beta and has severe limitations:
+- **Does not support FastAPI** (the core framework used in this project)
+- **Does not support most pip packages** (numpy, faiss, openai client, etc.)
+- Only supports a very limited subset of Python standard library
+- 50ms CPU time limit per request
+
+**If you try to deploy, you will get:** `ModuleNotFoundError: No module named 'fastapi'`
+
+**Solution: Use Option 1 (Docker + Cloud Services) instead.**
+
+<details>
+<summary>Historical Worker Configuration (for reference only - does not work)</summary>
 
 #### Prerequisites
 
@@ -164,7 +246,7 @@ python sync_env_to_wrangler.py --include-secrets --backend-only
 The `api/wrangler.toml` file is pre-configured for Workers deployment:
 
 ```toml
-name = "deepwiki-backend"
+name = "codewiki-backend"
 main = "worker.py"
 compatibility_date = "2024-01-01"
 
@@ -194,14 +276,14 @@ cd api
 wrangler deploy
 ```
 
-After deployment, Wrangler will provide your Worker URL (e.g., `https://deepwiki-backend.your-subdomain.workers.dev`).
+After deployment, Wrangler will provide your Worker URL (e.g., `https://codewiki-backend.your-subdomain.workers.dev`).
 
 #### Step 5: Update Frontend Configuration
 
 Update the `SERVER_BASE_URL` in your Cloudflare Pages environment variables to point to your Worker URL:
 
 ```
-SERVER_BASE_URL=https://deepwiki-backend.your-subdomain.workers.dev
+SERVER_BASE_URL=https://codewiki-backend.your-subdomain.workers.dev
 ```
 
 #### Important Notes
@@ -215,33 +297,26 @@ SERVER_BASE_URL=https://deepwiki-backend.your-subdomain.workers.dev
 
 - **Entry Point**: The `api/worker.py` file serves as the Workers entry point, wrapping the FastAPI application
 
-- **Monitoring**: View logs and metrics in the Cloudflare Dashboard → Workers & Pages → deepwiki-backend
+- **Monitoring**: View logs and metrics in the Cloudflare Dashboard → Workers & Pages → codewiki-backend
 
-### Option 2: Traditional Cloud Services
+</details>
 
-Deploy the FastAPI backend to:
-- **Google Cloud Run**
-- **AWS Lambda** (with API Gateway)
-- **Azure Functions**
-- **Heroku**
-- **DigitalOcean App Platform**
-- **Railway**
-- **Fly.io**
+### Option 3: AWS Lambda / Azure Functions
 
-Example for Cloud Run:
+### Option 3: AWS Lambda / Azure Functions
+
+Serverless options with more Python support than Cloudflare Workers:
+
+**AWS Lambda with Mangum:**
 ```bash
-# Build container
-docker build -f Dockerfile -t deepwiki-backend .
-
-# Deploy to Cloud Run
-gcloud run deploy deepwiki-backend \
-  --image gcr.io/your-project/deepwiki-backend \
-  --platform managed \
-  --region us-central1 \
-  --allow-unauthenticated
+pip install mangum
+# Add to your API: handler = Mangum(app)
 ```
 
-### Option 3: Self-Hosted
+**Azure Functions:**
+Deploy using Azure Functions Python runtime (v2 programming model).
+
+### Option 4: Self-Hosted
 
 Run the backend on your own infrastructure:
 

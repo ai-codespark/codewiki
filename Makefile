@@ -27,11 +27,33 @@ deploy-frontend: build-frontend ## 构建并部署前端到 Cloudflare Pages
 	@echo "🚀 部署前端到 Cloudflare Pages..."
 	@npx wrangler pages deploy .vercel/output/static --project-name codewiki
 
-deploy-backend: ## 部署后端到 Cloudflare Workers
-	@echo "🚀 部署后端到 Cloudflare Workers..."
+deploy-backend: ## ⚠️  部署后端到 Cloudflare Workers (不支持 - 请使用 Docker)
+	@echo "⚠️  警告: Cloudflare Workers 不支持 FastAPI 和本项目所需的 Python 包"
+	@echo "推荐使用 Docker 部署到 Cloud Run, Fly.io, 或 Railway"
+	@echo ""
+	@echo "如果仍要尝试 Workers 部署 (会失败):"
 	@cd api && npx wrangler deploy
 
-deploy-all: deploy-frontend deploy-backend ## 部署前端和后端
+docker-build: ## 构建 Docker 镜像
+	@echo "🐳 构建 Docker 镜像..."
+	@docker build -t deepwiki:latest .
+
+docker-run: ## 本地运行 Docker 容器
+	@echo "🐳 运行 Docker 容器..."
+	@docker run -p 3000:3000 -p 8001:8001 --env-file .env.local deepwiki:latest
+
+docker-deploy-gcp: docker-build ## 部署到 Google Cloud Run
+	@echo "🚀 部署到 Google Cloud Run..."
+	@read -p "输入 GCP 项目 ID: " project_id; \
+	docker tag deepwiki:latest gcr.io/$$project_id/deepwiki:latest; \
+	docker push gcr.io/$$project_id/deepwiki:latest; \
+	gcloud run deploy deepwiki \
+		--image gcr.io/$$project_id/deepwiki:latest \
+		--platform managed \
+		--region us-central1 \
+		--allow-unauthenticated
+
+deploy-all: deploy-frontend docker-build ## 部署前端和后端 (Docker)
 
 dev-frontend: ## 启动前端开发服务器
 	@echo "🔧 启动前端开发服务器..."
