@@ -25,6 +25,7 @@ LITELLM_API_KEY = os.environ.get('LITELLM_API_KEY')
 LITELLM_BASE_URL = os.environ.get('LITELLM_BASE_URL')
 AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+AWS_SESSION_TOKEN = os.environ.get('AWS_SESSION_TOKEN')
 AWS_REGION = os.environ.get('AWS_REGION')
 AWS_ROLE_ARN = os.environ.get('AWS_ROLE_ARN')
 
@@ -43,6 +44,8 @@ if AWS_ACCESS_KEY_ID:
     os.environ["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
 if AWS_SECRET_ACCESS_KEY:
     os.environ["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
+if AWS_SESSION_TOKEN:
+    os.environ["AWS_SESSION_TOKEN"] = AWS_SESSION_TOKEN
 if AWS_REGION:
     os.environ["AWS_REGION"] = AWS_REGION
 if AWS_ROLE_ARN:
@@ -161,7 +164,7 @@ def load_embedder_config():
     embedder_config = load_json_config("embedder.json")
 
     # Process client classes
-    for key in ["embedder", "embedder_ollama", "embedder_google", "embedder_litellm"]:
+    for key in ["embedder", "embedder_ollama", "embedder_google", "embedder_bedrock", "embedder_litellm"]:
         if key in embedder_config and "client_class" in embedder_config[key]:
             class_name = embedder_config[key]["client_class"]
             if class_name in CLIENT_CLASSES:
@@ -187,7 +190,9 @@ def get_embedder_config():
     logger.info(f"Getting embedder config for type: {embedder_type}")
 
     # Get base configuration (use deepcopy to avoid modifying original)
-    if embedder_type == 'google' and 'embedder_google' in configs:
+    if embedder_type == 'bedrock' and 'embedder_bedrock' in configs:
+        config = copy.deepcopy(configs.get("embedder_bedrock", {}))
+    elif embedder_type == 'google' and 'embedder_google' in configs:
         config = copy.deepcopy(configs.get("embedder_google", {}))
     elif embedder_type == 'ollama' and 'embedder_ollama' in configs:
         config = copy.deepcopy(configs.get("embedder_ollama", {}))
@@ -248,6 +253,24 @@ def is_google_embedder():
     client_class = embedder_config.get("client_class", "")
     return client_class == "GoogleEmbedderClient"
 
+def is_bedrock_embedder():
+    """
+    Check if the current embedder configuration uses BedrockClient.
+
+    Returns:
+        bool: True if using BedrockClient, False otherwise
+    """
+    embedder_config = get_embedder_config()
+    if not embedder_config:
+        return False
+
+    model_client = embedder_config.get("model_client")
+    if model_client:
+        return model_client.__name__ == "BedrockClient"
+
+    client_class = embedder_config.get("client_class", "")
+    return client_class == "BedrockClient"
+
 def is_litellm_embedder():
     """
     Check if the current embedder configuration uses LiteLLMClient.
@@ -274,17 +297,19 @@ def get_embedder_type():
     Returns only the type part, without the model name (e.g., "litellm" not "litellm/model_name").
 
     Returns:
-        str or None: 'ollama', 'google', 'litellm', 'openai', or None if not configured
+        str or None: 'bedrock', 'ollama', 'google', 'litellm', 'openai', or None if not configured
     """
     # First check environment variable (already parsed to just the type)
     embedder_type = EMBEDDER_TYPE
     if embedder_type is None:
         return None
-    if embedder_type in ['ollama', 'google', 'litellm', 'openai']:
+    if embedder_type in ['bedrock', 'ollama', 'google', 'litellm', 'openai']:
         return embedder_type
 
     # Fallback to config-based detection
-    if is_ollama_embedder():
+    if is_bedrock_embedder():
+        return 'bedrock'
+    elif is_ollama_embedder():
         return 'ollama'
     elif is_google_embedder():
         return 'google'
@@ -384,7 +409,7 @@ if generator_config:
 
 # Update embedder configuration
 if embedder_config:
-    for key in ["embedder", "embedder_ollama", "embedder_google", "embedder_litellm", "retriever", "text_splitter"]:
+    for key in ["embedder", "embedder_ollama", "embedder_google", "embedder_bedrock", "embedder_litellm", "retriever", "text_splitter"]:
         if key in embedder_config:
             configs[key] = embedder_config[key]
 

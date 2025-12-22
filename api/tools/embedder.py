@@ -9,7 +9,7 @@ def get_embedder(is_local_ollama: bool = False, use_google_embedder: bool = Fals
     Args:
         is_local_ollama: Legacy parameter for Ollama embedder
         use_google_embedder: Legacy parameter for Google embedder
-        embedder_type: Direct specification of embedder type ('ollama', 'google', 'openai', 'litellm')
+        embedder_type: Direct specification of embedder type ('ollama', 'google', 'bedrock', 'openai', 'litellm')
                       Note: If None or matches current EMBEDDER_TYPE, will use get_embedder_config()
                       which respects DEEPWIKI_EMBEDDER_TYPE including model name override (e.g., "litellm/model_name")
 
@@ -38,6 +38,10 @@ def get_embedder(is_local_ollama: bool = False, use_google_embedder: bool = Fals
             embedder_config = get_embedder_config()
             if embedder_config is None:
                 raise ValueError("Embedder not configured. Please set DEEPWIKI_EMBEDDER_TYPE environment variable or provide embedder_type parameter.")
+    elif embedder_type == 'bedrock':
+        embedder_config = configs.get("embedder_bedrock")
+        if not embedder_config:
+            raise ValueError("Bedrock embedder not configured in embedder.json")
     elif embedder_type == 'ollama':
         embedder_config = configs.get("embedder_ollama")
         if not embedder_config:
