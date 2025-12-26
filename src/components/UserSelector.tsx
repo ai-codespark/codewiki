@@ -452,6 +452,29 @@ next.config.js
               />
             </div>
 
+            {/* LiteLLM Model Name - show when custom model is enabled */}
+            {isCustomModel && (
+              <div>
+                <label htmlFor="litellm-model-name" className="block text-xs font-medium text-[var(--foreground)] mb-1.5">
+                  {t.form?.litellmModelName || 'LiteLLM Model Name'}
+                </label>
+                <input
+                  id="litellm-model-name"
+                  type="text"
+                  value={customModel}
+                  onChange={(e) => {
+                    setCustomModel(e.target.value);
+                    setModel(e.target.value);
+                  }}
+                  placeholder={t.form?.litellmModelNamePlaceholder || 'Enter LiteLLM model name (e.g., gpt-4, claude-3-opus)'}
+                  className="input-japanese block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
+                />
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  {t.form?.litellmModelNameHelp || 'Specify the model name to use with your LiteLLM server'}
+                </p>
+              </div>
+            )}
+
             {/* Test Connection Button */}
             <div className="mt-3">
               <button
@@ -461,15 +484,26 @@ next.config.js
                   setConnectionTestResult(null);
 
                   try {
+                    const testPayload: {
+                      api_key?: string;
+                      base_url?: string;
+                      model?: string;
+                    } = {
+                      api_key: effectiveLitellmApiKey || undefined,
+                      base_url: effectiveLitellmBaseUrl || undefined,
+                    };
+
+                    // Include model name if custom model is enabled and model name is provided
+                    if (isCustomModel && customModel) {
+                      testPayload.model = customModel;
+                    }
+
                     const response = await fetch('/api/litellm/test-connection', {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
                       },
-                      body: JSON.stringify({
-                        api_key: effectiveLitellmApiKey || undefined,
-                        base_url: effectiveLitellmBaseUrl || undefined,
-                      }),
+                      body: JSON.stringify(testPayload),
                     });
 
                     const result = await response.json();
@@ -483,7 +517,7 @@ next.config.js
                     setIsTestingConnection(false);
                   }
                 }}
-                disabled={isTestingConnection || !effectiveLitellmApiKey || !effectiveLitellmBaseUrl}
+                disabled={isTestingConnection || !effectiveLitellmApiKey || !effectiveLitellmBaseUrl || (isCustomModel && !customModel)}
                 className="w-full px-3 py-2 text-sm font-medium rounded-md border border-[var(--border-color)]/50 text-[var(--foreground)] bg-transparent hover:bg-[var(--background)] hover:border-[var(--accent-primary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isTestingConnection ? 'Testing...' : 'Test Connection'}

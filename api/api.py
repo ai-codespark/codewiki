@@ -314,15 +314,17 @@ class LiteLLMTestConnectionRequest(BaseModel):
     """Request model for testing LiteLLM connection"""
     api_key: Optional[str] = Field(None, description="LiteLLM API key")
     base_url: Optional[str] = Field(None, description="LiteLLM base URL")
+    model: Optional[str] = Field(None, description="LiteLLM model name to test")
 
 
 @app.post("/litellm/test-connection")
 async def test_litellm_connection(request: LiteLLMTestConnectionRequest):
     """
-    Test the connection to LiteLLM with provided API key and base URL.
+    Test the connection to LiteLLM with provided API key, base URL, and model name.
+    Tests using /chat/completions endpoint to verify the model works correctly.
 
     Args:
-        request: LiteLLMTestConnectionRequest containing api_key and base_url
+        request: LiteLLMTestConnectionRequest containing api_key, base_url, and optional model
 
     Returns:
         Dict with success status and message
@@ -332,6 +334,7 @@ async def test_litellm_connection(request: LiteLLMTestConnectionRequest):
     # Use provided values or fall back to .env values
     api_key = request.api_key if request.api_key else LITELLM_API_KEY
     base_url = request.base_url if request.base_url else LITELLM_BASE_URL
+    model_name = request.model
 
     if not api_key or not base_url:
         return {
@@ -345,32 +348,80 @@ async def test_litellm_connection(request: LiteLLMTestConnectionRequest):
         if not test_base_url.endswith('/v1'):
             test_base_url = f"{test_base_url}/v1"
 
-        models_endpoint = f"{test_base_url}/models"
-
         headers = {
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json'
         }
 
-        logger.info(f"Testing LiteLLM connection: {models_endpoint}")
-
         async with aiohttp.ClientSession() as session:
-            async with session.get(models_endpoint, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    model_count = len(data.get("data", [])) if isinstance(data.get("data"), list) else 0
-                    logger.info(f"LiteLLM connection test successful. Found {model_count} models.")
-                    return {
-                        "success": True,
-                        "message": f"Connection successful! Found {model_count} available models."
-                    }
-                else:
-                    error_text = await response.text()
-                    logger.error(f"LiteLLM connection test failed: {response.status} - {error_text}")
-                    return {
-                        "success": False,
-                        "message": f"Connection failed: {response.status} - {error_text[:200]}"
-                    }
+            # If model name is provided, test with /chat/completions
+            if model_name:
+                logger.info(f"Testing LiteLLM connection with model '{model_name}' using /chat/completions")
+                chat_endpoint = f"{test_base_url}/chat/completions"
+
+                # Create a minimal test request
+                test_payload = {
+                    "model": model_name,
+                    "messages": [
+                        {"role": "user", "content": "test"}
+                    ],
+                    "max_tokens": 5,
+                    "temperature": 0.1
+                }
+
+                async with session.post(chat_endpoint, headers=headers, json=test_payload, timeout=aiohttp.ClientTimeout(total=15)) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        logger.info(f"LiteLLM chat completion test successful with model '{model_name}'")
+                        return {
+                            "success": True,
+                            "message": f"Connection and model test successful! Model '{model_name}' is working correctly."
+                        }
+                    else:
+                        # Read response body once
+                        response_text = await response.text()
+                        error_msg = f"HTTP {response.status}"
+
+                        # Try to parse as JSON
+                        try:
+                            error_json = json.loads(response_text)
+                            parsed_error = error_json.get("error", {})
+                            if isinstance(parsed_error, dict):
+                                error_msg = parsed_error.get("message", parsed_error.get("type", str(parsed_error)))
+                            elif isinstance(parsed_error, str):
+                                error_msg = parsed_error
+                            else:
+                                error_msg = response_text[:200] if response_text else f"HTTP {response.status}"
+                        except:
+                            # Not JSON, use text directly
+                            error_msg = response_text[:200] if response_text else f"HTTP {response.status}"
+
+                        logger.error(f"LiteLLM chat completion test failed: {response.status} - {error_msg}")
+                        return {
+                            "success": False,
+                            "message": f"Model test failed: {response.status} - {error_msg}"
+                        }
+            else:
+                # If no model name provided, just test the /models endpoint
+                logger.info(f"Testing LiteLLM connection: {test_base_url}/models")
+                models_endpoint = f"{test_base_url}/models"
+
+                async with session.get(models_endpoint, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        model_count = len(data.get("data", [])) if isinstance(data.get("data"), list) else 0
+                        logger.info(f"LiteLLM connection test successful. Found {model_count} models.")
+                        return {
+                            "success": True,
+                            "message": f"Connection successful! Found {model_count} available models. To test a specific model, enable 'Use custom model' and enter a model name."
+                        }
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"LiteLLM connection test failed: {response.status} - {error_text}")
+                        return {
+                            "success": False,
+                            "message": f"Connection failed: {response.status} - {error_text[:200]}"
+                        }
     except asyncio.TimeoutError:
         logger.error("Timeout while testing LiteLLM connection")
         return {
