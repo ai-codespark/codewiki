@@ -26,7 +26,10 @@ make install
 # Build and deploy frontend on cloudflare (uses CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN from .env.local)
 make deploy-frontend
 
-# Deploy backend on Google Cloud (uses GCP_PROJECT_ID from .env.local)
+# Enable required APIs (uses GCP_PROJECT_ID and GCP_API_TOKEN from .env.local)
+make gcp-enable-apis
+
+# Deploy backend on Google Cloud (uses GCP_PROJECT_ID and GCP_API_TOKEN from .env.local)
 make docker-deploy-gcp
 ```
 
@@ -137,31 +140,80 @@ Deploy the backend using Docker to services that support full Python environment
 
 #### Google Cloud Run (Easiest)
 
-**Using Makefile (Recommended):**
+**Using Makefile (Recommended - No gcloud CLI required):**
 
-Add `GCP_PROJECT_ID` to your `.env.local` file:
+The Makefile uses token-based authentication via REST API, so you don't need to install `gcloud` CLI.
+
+Add these to your `.env.local` file:
 ```bash
 GCP_PROJECT_ID=your-gcp-project-id
+GCP_API_TOKEN=your-gcp-api-token
 ```
+
+**How to get GCP_API_TOKEN:**
+
+1. **Using gcloud CLI** (if you have it installed):
+   ```bash
+   gcloud auth print-access-token
+   ```
+
+2. **Using Service Account** (recommended for CI/CD):
+   - Create a service account in GCP Console
+   - Download the JSON key file
+   - Use the service account to generate tokens:
+     ```bash
+     gcloud auth activate-service-account --key-file=path/to/key.json
+     gcloud auth print-access-token
+     ```
+
+3. **Using OAuth2** (for user accounts):
+   - Follow Google's OAuth2 flow to get an access token
+   - See: https://developers.google.com/identity/protocols/oauth2
+
+The token needs permissions for:
+- `artifactregistry.googleapis.com`
+- `run.googleapis.com`
+- `cloudbuild.googleapis.com`
+- `containerregistry.googleapis.com`
 
 Then deploy:
 ```bash
+# First, enable required APIs (one-time setup)
+make gcp-enable-apis
+
+# Then deploy
 make docker-deploy-gcp
 ```
 
-**Manual deployment:**
+**Manual deployment (requires gcloud CLI):**
+
+If you prefer using `gcloud` CLI directly:
 
 ```bash
-# 1. Build the Docker image
+# 1. Install and authenticate gcloud CLI
+# See: https://cloud.google.com/sdk/docs/install
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+
+# 2. Enable required APIs
+gcloud services enable artifactregistry.googleapis.com
+gcloud services enable run.googleapis.com
+gcloud services enable cloudbuild.googleapis.com
+gcloud services enable containerregistry.googleapis.com
+
+# 3. Build the Docker image
 docker build -t codewiki-backend .
 
-# 2. Tag for Google Container Registry
+# 4. Configure Docker to use gcloud credentials
+gcloud auth configure-docker
+
+# 5. Tag for Google Container Registry
 docker tag codewiki-backend gcr.io/YOUR_PROJECT_ID/codewiki-backend
 
-# 3. Push to GCR
+# 6. Push to GCR
 docker push gcr.io/YOUR_PROJECT_ID/codewiki-backend
 
-# 4. Deploy to Cloud Run
+# 7. Deploy to Cloud Run
 gcloud run deploy codewiki-backend \
   --image gcr.io/YOUR_PROJECT_ID/codewiki-backend \
   --platform managed \
@@ -169,6 +221,8 @@ gcloud run deploy codewiki-backend \
   --allow-unauthenticated \
   --set-env-vars="OPENAI_API_KEY=your_key,GOOGLE_API_KEY=your_key"
 ```
+
+**Note:** The Makefile approach (using `GCP_API_TOKEN`) is recommended as it doesn't require installing the `gcloud` CLI.
 
 #### Fly.io (Simple & Fast)
 
@@ -561,7 +615,7 @@ The following variables are automatically treated as secrets (not written to wra
 # Frontend deployment (loads CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN from .env.local)
 make deploy-frontend
 
-# Backend deployment to Google Cloud Run (loads GCP_PROJECT_ID from .env.local)
+# Backend deployment to Google Cloud Run (loads GCP_PROJECT_ID and GCP_API_TOKEN from .env.local)
 make docker-deploy-gcp
 ```
 
