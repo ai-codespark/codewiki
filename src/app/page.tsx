@@ -120,7 +120,7 @@ export default function Home() {
     if (repositoryInput) {
       loadConfigFromCache(repositoryInput);
     }
-  }, []);
+  }, [repositoryInput, loadConfigFromCache]);
 
   // Provider-based model selection state
   const [provider, setProvider] = useState<string>('');

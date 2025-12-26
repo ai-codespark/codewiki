@@ -31,6 +31,9 @@ make gcp-enable-apis
 
 # Deploy backend on Google Cloud (uses GCP_PROJECT_ID and GCP_API_TOKEN from .env.local)
 make docker-deploy-gcp
+
+# Allow unauthenticated access (Optional)
+make gcp-fix-auth
 ```
 
 ## Prerequisites
@@ -123,6 +126,13 @@ OPENROUTER_API_KEY=your_openrouter_api_key (optional)
 OLLAMA_HOST=your_ollama_host (optional, defaults to http://localhost:11434)
 DEEPWIKI_EMBEDDER_TYPE=google (optional, defaults to openai)
 ```
+
+**Important**: After setting `SERVER_BASE_URL`, verify the configuration by visiting:
+```
+https://your-cloudflare-pages-url.pages.dev/api/test-backend
+```
+
+This test endpoint will show whether `SERVER_BASE_URL` is configured correctly and if the backend is reachable. See the [Testing Configuration](#testing-configuration) section for more details.
 
 ## Backend Deployment Options
 
@@ -497,6 +507,41 @@ webpack: (config, { isServer }) => {
 
 ## Troubleshooting
 
+### Testing Configuration
+
+After deploying, verify your configuration is correct by visiting the test endpoint:
+
+```
+https://your-cloudflare-pages-url.pages.dev/api/test-backend
+```
+
+This endpoint will show:
+- Whether `SERVER_BASE_URL` is configured
+- The current value of `SERVER_BASE_URL`
+- Whether the backend is reachable
+- Connection status and any errors
+
+**Example Response:**
+```json
+{
+  "configured": true,
+  "serverBaseUrl": "https://your-backend-url.run.app",
+  "environment": "production",
+  "timestamp": "2024-01-01T00:00:00.000Z",
+  "connection": {
+    "reachable": true,
+    "status": 200,
+    "error": null
+  }
+}
+```
+
+**If you see connection errors:**
+1. Verify `SERVER_BASE_URL` is set in Cloudflare Pages → Settings → Environment Variables
+2. Ensure the backend URL is correct (from `make docker-deploy-gcp` output)
+3. Check that the backend is running and accessible
+4. Verify CORS is configured on the backend (should allow all origins)
+
 ### Build Errors
 
 **Error**: `self is not defined`
@@ -515,6 +560,13 @@ webpack: (config, { isServer }) => {
 
 **Error**: Missing environment variables
 - **Solution**: Configure all required env vars in Cloudflare Pages settings
+
+**Error**: 403 Forbidden on API routes (`/api/auth/status`, `/api/models/config`, etc.)
+- **Solution**:
+  1. Verify `SERVER_BASE_URL` is set in Cloudflare Pages environment variables
+  2. Test the configuration using `/api/test-backend` endpoint
+  3. Ensure the backend URL is correct and the backend is running
+  4. Check backend logs for any authentication or CORS issues
 
 ## Local Development
 
@@ -535,7 +587,8 @@ Access the app at `http://localhost:3000`
 
 - [ ] Frontend deployed to Cloudflare Pages
 - [ ] Backend deployed and accessible
-- [ ] `SERVER_BASE_URL` points to backend
+- [ ] `SERVER_BASE_URL` points to backend (get URL from `make docker-deploy-gcp` output)
+- [ ] Configuration tested using `/api/test-backend` endpoint (should show `reachable: true`)
 - [ ] All API keys configured in Pages environment variables
 - [ ] Custom domain configured (optional)
 - [ ] HTTPS enabled (automatic on Cloudflare)

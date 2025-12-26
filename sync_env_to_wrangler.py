@@ -24,13 +24,15 @@ from typing import Dict, List, Set
 
 
 # Environment variables that should be treated as secrets (not added to vars section)
+# Note: LITELLM_BASE_URL and LITELLM_API_KEY are NOT in this list, so they will be synced to [vars] section.
+# If you prefer to keep LITELLM_API_KEY as a secret for better security, add it back to this list
+# and set it using 'wrangler secret put LITELLM_API_KEY' instead.
 SECRET_KEYS = {
     'GOOGLE_API_KEY',
     'OPENAI_API_KEY',
     'AZURE_OPENAI_API_KEY',
     'AZURE_OPENAI_ENDPOINT',
     'OPENROUTER_API_KEY',
-    'LITELLM_API_KEY',
     'AWS_ACCESS_KEY_ID',
     'AWS_SECRET_ACCESS_KEY',
 }
