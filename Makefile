@@ -25,7 +25,7 @@ build-frontend: ## 构建前端 (Cloudflare Pages)
 
 deploy-frontend: build-frontend ## 构建并部署前端到 Cloudflare Pages
 	@echo "🚀 部署前端到 Cloudflare Pages..."
-	@npx wrangler pages deploy .vercel/output/static --project-name codewiki
+	@bash -c 'if [ -f .env.local ]; then set -a; source .env.local; set +a; fi; npx wrangler pages deploy .vercel/output/static --project-name codewiki'
 
 deploy-backend: ## ⚠️  部署后端到 Cloudflare Workers (不支持 - 请使用 Docker)
 	@echo "⚠️  警告: Cloudflare Workers 不支持 FastAPI 和本项目所需的 Python 包"
@@ -36,7 +36,7 @@ deploy-backend: ## ⚠️  部署后端到 Cloudflare Workers (不支持 - 请�
 
 docker-build: ## 构建 Docker 镜像
 	@echo "🐳 构建 Docker 镜像..."
-	@docker build -t deepwiki:latest .
+	@docker build --network=host -t deepwiki:latest .
 
 docker-run: ## 本地运行 Docker 容器
 	@echo "🐳 运行 Docker 容器..."
@@ -44,14 +44,18 @@ docker-run: ## 本地运行 Docker 容器
 
 docker-deploy-gcp: docker-build ## 部署到 Google Cloud Run
 	@echo "🚀 部署到 Google Cloud Run..."
-	@read -p "输入 GCP 项目 ID: " project_id; \
-	docker tag deepwiki:latest gcr.io/$$project_id/deepwiki:latest; \
-	docker push gcr.io/$$project_id/deepwiki:latest; \
+	@bash -c 'if [ -f .env.local ]; then set -a; source .env.local; set +a; fi; \
+	if [ -z "$$GCP_PROJECT_ID" ]; then \
+		echo "❌ 错误: GCP_PROJECT_ID 未在 .env.local 中设置"; \
+		exit 1; \
+	fi; \
+	docker tag deepwiki:latest gcr.io/$$GCP_PROJECT_ID/deepwiki:latest; \
+	docker push gcr.io/$$GCP_PROJECT_ID/deepwiki:latest; \
 	gcloud run deploy deepwiki \
-		--image gcr.io/$$project_id/deepwiki:latest \
+		--image gcr.io/$$GCP_PROJECT_ID/deepwiki:latest \
 		--platform managed \
 		--region us-central1 \
-		--allow-unauthenticated
+		--allow-unauthenticated'
 
 deploy-all: deploy-frontend docker-build ## 部署前端和后端 (Docker)
 

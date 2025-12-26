@@ -248,12 +248,12 @@ def main():
 
     print("✅ Environment sync complete!")
     print("\nUsage options:")
-    print("  python sync_env_to_wrangler.py                # Sync public vars only")
-    print("  python sync_env_to_wrangler.py --all-vars    # Sync ALL variables")
+    print("  python sync_env_to_wrangler.py                    # Sync public vars only")
+    print("  python sync_env_to_wrangler.py --all-vars         # Sync ALL variables")
     print("  python sync_env_to_wrangler.py --include-secrets  # Add [secrets] section (commented)")
     print("  python sync_env_to_wrangler.py --frontend-only    # Frontend only")
     print("  python sync_env_to_wrangler.py --backend-only     # Backend only")
-    print("  python sync_env_to_wrangler.py --help         # Show help")
+    print("  python sync_env_to_wrangler.py --help             # Show help")
 
 
 if __name__ == '__main__':

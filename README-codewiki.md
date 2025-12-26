@@ -23,18 +23,10 @@ make sync-env
 # Install dependency
 make install
 
-# Set deployment variables for frontend
-npx wrangler whoami
-export CLOUDFLARE_ACCOUNT_ID="your-account-id-here"
-export CLOUDFLARE_API_TOKEN="your-api-token-here"
-
-# Build and deploy frontend on cloudflare
+# Build and deploy frontend on cloudflare (uses CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN from .env.local)
 make deploy-frontend
 
-# Set deployment variables for backend
-export GCP_PROJECT_ID="your-project-id-here"
-
-# Deploy backend on Google Cloud
+# Deploy backend on Google Cloud (uses GCP_PROJECT_ID from .env.local)
 make docker-deploy-gcp
 ```
 
@@ -79,11 +71,13 @@ Get your Cloudflare Account ID:
 npx wrangler whoami
 ```
 
-Set environment variables:
+Add these to your `.env.local` file:
 ```bash
-export CLOUDFLARE_ACCOUNT_ID="your-account-id-here"
-export CLOUDFLARE_API_TOKEN="your-api-token-here"
+CLOUDFLARE_ACCOUNT_ID=your-account-id-here
+CLOUDFLARE_API_TOKEN=your-api-token-here
 ```
+
+The Makefile will automatically load these variables when you run `make deploy-frontend`.
 
 ### Step 4: Deploy to Cloudflare Pages
 
@@ -142,6 +136,20 @@ The Python backend (`api/` folder) needs to be deployed separately. Choose one o
 Deploy the backend using Docker to services that support full Python environments:
 
 #### Google Cloud Run (Easiest)
+
+**Using Makefile (Recommended):**
+
+Add `GCP_PROJECT_ID` to your `.env.local` file:
+```bash
+GCP_PROJECT_ID=your-gcp-project-id
+```
+
+Then deploy:
+```bash
+make docker-deploy-gcp
+```
+
+**Manual deployment:**
 
 ```bash
 # 1. Build the Docker image
@@ -546,6 +554,18 @@ The following variables are automatically treated as secrets (not written to wra
 4. Deploy your application
 
 ### Deployment Commands
+
+**Using Makefile (Recommended - automatically loads from .env.local):**
+
+```bash
+# Frontend deployment (loads CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN from .env.local)
+make deploy-frontend
+
+# Backend deployment to Google Cloud Run (loads GCP_PROJECT_ID from .env.local)
+make docker-deploy-gcp
+```
+
+**Manual deployment:**
 
 ```bash
 # Frontend deployment

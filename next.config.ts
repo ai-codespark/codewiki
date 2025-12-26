@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // Enable standalone output for Docker deployment
+  output: 'standalone',
   // Optimize build for Docker
   experimental: {
     optimizePackageImports: ['react-syntax-highlighter'],
