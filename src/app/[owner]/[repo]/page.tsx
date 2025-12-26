@@ -619,7 +619,9 @@ Remember:
         try {
           // Create WebSocket URL from the server base URL
           const serverBaseUrl = process.env.SERVER_BASE_URL || 'http://localhost:8001';
-          const wsBaseUrl = serverBaseUrl.replace(/^http/, 'ws')? serverBaseUrl.replace(/^https/, 'wss'): serverBaseUrl.replace(/^http/, 'ws');
+          const wsBaseUrl = serverBaseUrl.startsWith('https')
+            ? serverBaseUrl.replace(/^https/, 'wss')
+            : serverBaseUrl.replace(/^http/, 'ws');
           const wsUrl = `${wsBaseUrl}/ws/chat`;
 
           // Create a new WebSocket connection
@@ -916,7 +918,9 @@ IMPORTANT:
       try {
         // Create WebSocket URL from the server base URL
         const serverBaseUrl = process.env.SERVER_BASE_URL || 'http://localhost:8001';
-        const wsBaseUrl = serverBaseUrl.replace(/^http/, 'ws')? serverBaseUrl.replace(/^https/, 'wss'): serverBaseUrl.replace(/^http/, 'ws');
+        const wsBaseUrl = serverBaseUrl.startsWith('https')
+          ? serverBaseUrl.replace(/^https/, 'wss')
+          : serverBaseUrl.replace(/^http/, 'ws');
         const wsUrl = `${wsBaseUrl}/ws/chat`;
 
         // Create a new WebSocket connection
@@ -924,8 +928,14 @@ IMPORTANT:
 
         // Create a promise that resolves when the WebSocket connection is complete
         await new Promise<void>((resolve, reject) => {
+          // If the connection doesn't open within 5 seconds, fall back to HTTP
+          const timeout = setTimeout(() => {
+            reject(new Error('WebSocket connection timeout'));
+          }, 5000);
+
           // Set up event handlers
           ws.onopen = () => {
+            clearTimeout(timeout);
             console.log('WebSocket connection established for wiki structure');
             // Send the request as JSON
             ws.send(JSON.stringify(requestBody));
@@ -933,22 +943,9 @@ IMPORTANT:
           };
 
           ws.onerror = (error) => {
+            clearTimeout(timeout);
             console.error('WebSocket error:', error);
             reject(new Error('WebSocket connection failed'));
-          };
-
-          // If the connection doesn't open within 5 seconds, fall back to HTTP
-          const timeout = setTimeout(() => {
-            reject(new Error('WebSocket connection timeout'));
-          }, 5000);
-
-          // Clear the timeout if the connection opens successfully
-          ws.onopen = () => {
-            clearTimeout(timeout);
-            console.log('WebSocket connection established for wiki structure');
-            // Send the request as JSON
-            ws.send(JSON.stringify(requestBody));
-            resolve();
           };
         });
 
@@ -975,16 +972,44 @@ IMPORTANT:
         console.error('WebSocket error, falling back to HTTP:', wsError);
 
         // Fall back to HTTP if WebSocket fails
-        const response = await fetch(`/api/chat/stream`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody)
-        });
+        let response: Response;
+        try {
+          response = await fetch(`/api/chat/stream`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody)
+          });
+        } catch (fetchError) {
+          console.error('HTTP fallback also failed:', fetchError);
+          const errorMessage = fetchError instanceof Error ? fetchError.message : 'Unknown error';
+          throw new Error(`Failed to connect to server: ${errorMessage}. Please ensure the backend server is running at ${process.env.SERVER_BASE_URL || 'http://localhost:8001'}`);
+        }
 
         if (!response.ok) {
-          throw new Error(`Error determining wiki structure: ${response.status}`);
+          // Try to get error details from the response
+          let errorDetails = '';
+          try {
+            const errorData = await response.json();
+            errorDetails = errorData.error || errorData.details || '';
+          } catch (e) {
+            // If response is not JSON, try to get text
+            try {
+              errorDetails = await response.text();
+            } catch (e2) {
+              errorDetails = `HTTP ${response.status}: ${response.statusText}`;
+            }
+          }
+
+          // Provide more helpful error messages based on status code
+          if (response.status === 500) {
+            throw new Error(`Backend server error (500): ${errorDetails || 'Internal server error. Please check the backend server logs and ensure it is running correctly.'}`);
+          } else if (response.status === 503) {
+            throw new Error(`Backend server unavailable (503): ${errorDetails || 'The backend server is temporarily unavailable. Please ensure the server is running at ' + (process.env.SERVER_BASE_URL || 'http://localhost:8001')}`);
+          } else {
+            throw new Error(`Error determining wiki structure (${response.status}): ${errorDetails || response.statusText}`);
+          }
         }
 
         // Process the response
@@ -993,13 +1018,18 @@ IMPORTANT:
         const decoder = new TextDecoder();
 
         if (!reader) {
-          throw new Error('Failed to get response reader');
+          throw new Error('Failed to get response reader from server response');
         }
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          responseText += decoder.decode(value, { stream: true });
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            responseText += decoder.decode(value, { stream: true });
+          }
+        } catch (readError) {
+          console.error('Error reading response stream:', readError);
+          throw new Error(`Failed to read response from server: ${readError instanceof Error ? readError.message : 'Unknown error'}`);
         }
       }
 

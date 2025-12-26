@@ -301,7 +301,7 @@ Make the workshop content in ${language === 'en' ? 'English' :
   language === 'zh-tw' ? 'Traditional Chinese (繁體中文)' :
   language === 'es' ? 'Spanish (Español)' :
   language === 'kr' ? 'Korean (한국어)' :
-  language === 'vi' ? 'Vietnamese (Tiếng Việt)' : 
+  language === 'vi' ? 'Vietnamese (Tiếng Việt)' :
   language === "pt-br" ? "Brazilian Portuguese (Português Brasileiro)" :
   language === "fr" ? "Français (French)" :
   language === "ru" ? "Русский (Russian)" :
@@ -318,7 +318,9 @@ Make the workshop content in ${language === 'en' ? 'English' :
       try {
         // Create WebSocket URL from the server base URL
         const serverBaseUrl = process.env.SERVER_BASE_URL || 'http://localhost:8001';
-        const wsBaseUrl = serverBaseUrl.replace(/^http/, 'ws')? serverBaseUrl.replace(/^https/, 'wss'): serverBaseUrl.replace(/^http/, 'ws');
+        const wsBaseUrl = serverBaseUrl.startsWith('https')
+          ? serverBaseUrl.replace(/^https/, 'wss')
+          : serverBaseUrl.replace(/^http/, 'ws');
         const wsUrl = `${wsBaseUrl}/ws/chat`;
 
         // Create a new WebSocket connection
@@ -326,8 +328,14 @@ Make the workshop content in ${language === 'en' ? 'English' :
 
         // Create a promise that resolves when the WebSocket connection is complete
         await new Promise<void>((resolve, reject) => {
+          // If the connection doesn't open within 5 seconds, fall back to HTTP
+          const timeout = setTimeout(() => {
+            reject(new Error('WebSocket connection timeout'));
+          }, 5000);
+
           // Set up event handlers
           ws.onopen = () => {
+            clearTimeout(timeout);
             console.log('WebSocket connection established for workshop generation');
             // Send the request as JSON
             ws.send(JSON.stringify(requestBody));
@@ -335,22 +343,9 @@ Make the workshop content in ${language === 'en' ? 'English' :
           };
 
           ws.onerror = (error) => {
+            clearTimeout(timeout);
             console.error('WebSocket error:', error);
             reject(new Error('WebSocket connection failed'));
-          };
-
-          // If the connection doesn't open within 5 seconds, fall back to HTTP
-          const timeout = setTimeout(() => {
-            reject(new Error('WebSocket connection timeout'));
-          }, 5000);
-
-          // Clear the timeout if the connection opens successfully
-          ws.onopen = () => {
-            clearTimeout(timeout);
-            console.log('WebSocket connection established for workshop generation');
-            // Send the request as JSON
-            ws.send(JSON.stringify(requestBody));
-            resolve();
           };
         });
 
